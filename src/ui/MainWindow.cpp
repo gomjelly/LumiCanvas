@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
 #include <QDockWidget>
@@ -24,6 +25,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScreen>
 #include <QSignalBlocker>
@@ -76,6 +78,12 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(&m_project, &Project::structureChanged, this, &MainWindow::onStructureChanged);
     connect(&m_project, &Project::surfaceChanged, this, &MainWindow::onSurfaceChanged);
+    connect(&m_project, &Project::guideChanged, this, [this] {
+        setWindowModified(true);
+        updateGuidePanel();
+        syncEngine();
+    });
+    updateGuidePanel();
     Sequence* sequence = &m_project.sequence();
     connect(sequence, &Sequence::loaded, this, &MainWindow::onSequenceLoaded);
     connect(sequence, &Sequence::currentChanged, this, [this] {
@@ -165,9 +173,12 @@ void MainWindow::createActions()
     m_alignAction->setCheckable(true);
     m_alignAction->setShortcut(QKeySequence(Qt::Key_T));
     connect(m_alignAction, &QAction::toggled, this, &MainWindow::setAlignmentMode);
+    m_guideModeAction = addAction(sequenceMenu, tr("&Cycle Guide Display"), {QKeySequence(Qt::Key_G)},
+                                  &MainWindow::cycleGuideMode);
 
     // Stepping must work while the projector output window has focus, too.
-    m_showActions = {m_nextAction, m_previousAction, m_firstAction, m_lastAction, m_guideAction, m_alignAction};
+    m_showActions = {m_nextAction, m_previousAction, m_firstAction, m_lastAction,
+                     m_guideAction, m_alignAction, m_guideModeAction};
     for (QAction* action : std::as_const(m_showActions))
         action->setShortcutContext(Qt::ApplicationShortcut);
 
@@ -269,12 +280,111 @@ QWidget* MainWindow::createSequencePanel()
     toggleRow->addWidget(actionButton(m_alignAction));
     layout->addLayout(toggleRow);
 
+    layout->addWidget(createGuidePanel());
+
     auto* hint = new QLabel(tr("Space / PageDown: next  ·  Backspace / PageUp: previous\n"
-                               "Home / End: first / last  ·  H: guide on/off  ·  T: alignment"));
+                               "Home / End: first / last  ·  H: guide on/off  ·  T: alignment\n"
+                               "G: cycle guide display"));
     hint->setWordWrap(true);
     hint->setForegroundRole(QPalette::PlaceholderText);
     layout->addWidget(hint);
     return panel;
+}
+
+QWidget* MainWindow::createGuidePanel()
+{
+    auto* box = new QGroupBox(tr("Guide Display"));
+    m_guideForm = new QFormLayout(box);
+
+    auto updateGuide = [this](auto change) {
+        GuideSettings guide = m_project.guide();
+        change(guide);
+        m_project.setGuide(guide);
+    };
+
+    // Combo order matches GuideMode.
+    m_guideModeCombo = new QComboBox;
+    m_guideModeCombo->addItems({tr("Normal"), tr("Highlight new parts"), tr("Onion skin")});
+    connect(m_guideModeCombo, &QComboBox::activated, this, [updateGuide](int index) {
+        updateGuide([index](GuideSettings& g) { g.mode = GuideMode(index); });
+    });
+    m_guideForm->addRow(tr("Mode"), m_guideModeCombo);
+
+    auto makePercentSlider = [] {
+        auto* slider = new QSlider(Qt::Horizontal);
+        slider->setRange(0, 100);
+        return slider;
+    };
+
+    m_dimSlider = makePercentSlider();
+    m_dimSlider->setToolTip(tr("Brightness of parts that were already in the previous step"));
+    connect(m_dimSlider, &QSlider::valueChanged, this, [updateGuide](int value) {
+        updateGuide([value](GuideSettings& g) { g.dimUnchanged = value / 100.0f; });
+    });
+    m_guideForm->addRow(tr("Drawn parts"), m_dimSlider);
+
+    m_tintCheck = new QCheckBox(tr("Tint new parts"));
+    connect(m_tintCheck, &QCheckBox::toggled, this, [updateGuide](bool on) {
+        updateGuide([on](GuideSettings& g) { g.tintChanges = on; });
+    });
+    m_tintColorButton = new QToolButton;
+    m_tintColorButton->setToolTip(tr("Highlight colour"));
+    connect(m_tintColorButton, &QToolButton::clicked, this, &MainWindow::chooseHighlightColor);
+    auto* tintRow = new QHBoxLayout;
+    tintRow->addWidget(m_tintCheck, 1);
+    tintRow->addWidget(m_tintColorButton);
+    m_guideForm->addRow(QString(), tintRow);
+
+    m_previousSlider = makePercentSlider();
+    m_previousSlider->setToolTip(tr("How strongly the previous step shows through"));
+    connect(m_previousSlider, &QSlider::valueChanged, this, [updateGuide](int value) {
+        updateGuide([value](GuideSettings& g) { g.previousOpacity = value / 100.0f; });
+    });
+    m_guideForm->addRow(tr("Previous step"), m_previousSlider);
+
+    return box;
+}
+
+void MainWindow::updateGuidePanel()
+{
+    const GuideSettings& g = m_project.guide();
+    const QSignalBlocker b1(m_guideModeCombo);
+    const QSignalBlocker b2(m_dimSlider);
+    const QSignalBlocker b3(m_tintCheck);
+    const QSignalBlocker b4(m_previousSlider);
+
+    m_guideModeCombo->setCurrentIndex(int(g.mode));
+    m_dimSlider->setValue(qRound(g.dimUnchanged * 100));
+    m_tintCheck->setChecked(g.tintChanges);
+    m_previousSlider->setValue(qRound(g.previousOpacity * 100));
+
+    QPixmap swatch(16, 16);
+    swatch.fill(g.highlightColor);
+    m_tintColorButton->setIcon(QIcon(swatch));
+
+    const bool highlight = g.mode == GuideMode::Highlight;
+    m_guideForm->setRowVisible(m_dimSlider, highlight);
+    m_guideForm->setRowVisible(2, highlight); // tint row
+    m_guideForm->setRowVisible(m_previousSlider, g.mode == GuideMode::Onion);
+}
+
+void MainWindow::cycleGuideMode()
+{
+    GuideSettings guide = m_project.guide();
+    guide.mode = GuideMode((int(guide.mode) + 1) % 3);
+    m_project.setGuide(guide);
+    statusBar()->showMessage(tr("Guide display: %1").arg(m_guideModeCombo->itemText(int(guide.mode))), 2000);
+}
+
+void MainWindow::chooseHighlightColor()
+{
+    GuideSettings guide = m_project.guide();
+    const QColor color = QColorDialog::getColor(guide.highlightColor, this, tr("Highlight Colour"));
+    if (!color.isValid())
+        return;
+    guide.highlightColor = color;
+    guide.tintChanges = true; // picking a colour implies wanting it
+    m_project.setGuide(guide);
 }
 
 QWidget* MainWindow::createSurfacesPanel()
@@ -771,6 +881,26 @@ void MainWindow::updatePropertyPanel()
     m_visibleCheck->setChecked(s.visible);
 }
 
+void MainWindow::applyGuide(SceneSurface& out, const Surface& surface) const
+{
+    const GuideSettings& g = m_project.guide();
+    const Sequence& sequence = m_project.sequence();
+    const QImage previous = sequence.previousImage();
+    // While the previous step is still loading, show the plain image rather than
+    // highlighting everything as new.
+    if (g.mode == GuideMode::Normal || (sequence.currentIndex() > 0 && previous.isNull()))
+        return;
+
+    out.guide = g.mode == GuideMode::Highlight ? SceneSurface::Guide::Highlight : SceneSurface::Guide::Onion;
+    out.previous = previous;
+    if (!previous.isNull())
+        out.previousRect = contentRect(surface.fit, surface.canvasSizeMm, previous.size());
+    out.dimUnchanged = g.dimUnchanged;
+    out.previousOpacity = g.previousOpacity;
+    out.tintAmount = g.tintChanges ? 1.0f : 0.0f;
+    out.highlightColor = {g.highlightColor.redF(), g.highlightColor.greenF(), g.highlightColor.blueF(), 1.0f};
+}
+
 void MainWindow::syncEngine()
 {
     auto scene = std::make_shared<Scene>();
@@ -798,6 +928,8 @@ void MainWindow::syncEngine()
                     out.image = image;
                     out.contentRect = contentRect(s.fit, s.canvasSizeMm, image.size());
                 }
+                if (s.content == ContentType::Sequence)
+                    applyGuide(out, s);
             }
             scene->surfaces.push_back(std::move(out));
         }

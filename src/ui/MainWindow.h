@@ -12,6 +12,8 @@ class QAction;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QFormLayout;
+class QToolButton;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -64,6 +66,10 @@ private:
     void updateSequencePanel();
     void setGuideVisible(bool visible);
     void setAlignmentMode(bool on);
+    QWidget* createGuidePanel();
+    void updateGuidePanel();
+    void cycleGuideMode();
+    void chooseHighlightColor();
 
     void addSurface();
     void removeSurface();
@@ -75,6 +81,7 @@ private:
     void onSurfaceChanged(int index);
     void updatePropertyPanel();
     void syncEngine();
+    void applyGuide(SceneSurface& out, const Surface& surface) const;
 
     void refreshScreens();
     QScreen* selectedScreen() const;
@@ -102,6 +109,14 @@ private:
     QAction* m_lastAction = nullptr;
     QAction* m_guideAction = nullptr;
     QAction* m_alignAction = nullptr;
+    QAction* m_guideModeAction = nullptr;
+
+    QFormLayout* m_guideForm = nullptr;
+    QComboBox* m_guideModeCombo = nullptr;
+    QSlider* m_dimSlider = nullptr;
+    QCheckBox* m_tintCheck = nullptr;
+    QToolButton* m_tintColorButton = nullptr;
+    QSlider* m_previousSlider = nullptr;
 
     QLabel* m_sequenceFolderLabel = nullptr;
     QLabel* m_stepLabel = nullptr;

@@ -11,11 +11,16 @@ cbuffer SurfaceConstants : register(b0)
     float4 hRow1;
     float4 hRow2;
     float4 contentRect; // image placement in surface UV: xy offset, zw size
+    float4 previousRect; // same for the previous step image
     float4 tint;
     float4 params;     // x: opacity, y: 1 = texture, 0 = test pattern
+    float4 guide;      // x: 0 normal, 1 highlight changes, 2 onion skin
+                       // y: dim unchanged, z: previous opacity, w: tint amount
+    float4 highlightColor;
 };
 
 Texture2D contentTexture : register(t0);
+Texture2D previousTexture : register(t1); // unbound = nothing drawn before
 SamplerState contentSampler : register(s0);
 
 struct VSOutput
@@ -66,19 +71,48 @@ float3 testPattern(float2 uv)
     return lerp(color, tint.rgb, border);
 }
 
+// Fit leaves bars outside the image transparent; Fill crops via the clamp.
+float4 sampleContent(Texture2D image, float2 uv, float4 rect)
+{
+    float2 contentUv = (uv - rect.xy) / rect.zw;
+    bool inside = all(contentUv >= 0.0) && all(contentUv <= 1.0);
+    float4 c = image.Sample(contentSampler, saturate(contentUv));
+    return inside ? c : float4(0.0, 0.0, 0.0, 0.0);
+}
+
+float4 applyGuide(float4 current, float4 previous)
+{
+    // Compare in premultiplied space so transparent and black count as "empty".
+    float3 cur = current.rgb * current.a;
+    float3 prev = previous.rgb * previous.a;
+
+    // Highlight: what changed since the previous step stays bright, the rest is dimmed.
+    float3 d = abs(cur - prev);
+    float changed = smoothstep(0.06, 0.2, max(d.r, max(d.g, d.b)));
+    // Tint keeps the current brightness, so parts erased since the last step stay dark.
+    float3 tinted = highlightColor.rgb * max(cur.r, max(cur.g, cur.b));
+    float3 fresh = lerp(cur, tinted, guide.w);
+    float3 highlighted = lerp(cur * guide.y, fresh, changed);
+
+    // Onion skin: the previous step shows through faintly wherever it is brighter.
+    float3 onion = max(cur, prev * guide.z);
+
+    float3 rgb = guide.x < 0.5 ? cur : (guide.x < 1.5 ? highlighted : onion);
+    float alpha = guide.x < 0.5 ? current.a : max(current.a, previous.a);
+    return float4(rgb / max(alpha, 1e-4), alpha);
+}
+
 float4 PSMain(VSOutput input) : SV_Target
 {
     float3 p = float3(input.canvas, 1.0);
     float w = dot(hRow2.xyz, p);
     float2 uv = saturate(float2(dot(hRow0.xyz, p), dot(hRow1.xyz, p)) / w);
 
-    // Fit leaves bars outside the image transparent; Fill crops via the clamp.
-    float2 contentUv = (uv - contentRect.xy) / contentRect.zw;
-    bool insideContent = all(contentUv >= 0.0) && all(contentUv <= 1.0);
-    float4 texColor = contentTexture.Sample(contentSampler, saturate(contentUv));
-    texColor.a *= insideContent ? 1.0 : 0.0;
+    // Both steps are always sampled so no gradient op sits inside flow control.
+    float4 current = sampleContent(contentTexture, uv, contentRect);
+    float4 previous = sampleContent(previousTexture, uv, previousRect);
 
-    float4 color = params.y > 0.5 ? texColor : float4(testPattern(uv), 1.0);
+    float4 color = params.y > 0.5 ? applyGuide(current, previous) : float4(testPattern(uv), 1.0);
     color.a *= params.x;
     return color;
 }

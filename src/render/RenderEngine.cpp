@@ -24,8 +24,11 @@ struct SurfaceConstants {
     float hRow1[4];
     float hRow2[4];
     float contentRect[4];
+    float previousRect[4];
     float tint[4];
     float params[4]; // x: opacity, y: 1 = texture, 0 = test pattern
+    float guide[4];  // x: mode, y: dim unchanged, z: previous opacity, w: tint amount
+    float highlightColor[4];
 };
 static_assert(sizeof(SurfaceConstants) % 16 == 0);
 
@@ -399,6 +402,8 @@ bool RenderEngine::renderOutput(Output& out, const Scene& scene, bool vsync)
             continue; // degenerate quad
 
         ID3D11ShaderResourceView* srv = s.image.isNull() ? nullptr : textureFor(s.image);
+        // An unbound previous texture samples as transparent black: "nothing drawn yet".
+        ID3D11ShaderResourceView* previousSrv = s.previous.isNull() ? nullptr : textureFor(s.previous);
 
         SurfaceConstants c{};
         for (int i = 0; i < 4; ++i) {
@@ -413,6 +418,12 @@ bool RenderEngine::renderOutput(Output& out, const Scene& scene, bool vsync)
         std::copy(s.tint.begin(), s.tint.end(), c.tint);
         c.params[0] = s.opacity;
         c.params[1] = srv ? 1.0f : 0.0f;
+        std::copy(s.previousRect.begin(), s.previousRect.end(), c.previousRect);
+        c.guide[0] = float(int(s.guide));
+        c.guide[1] = s.dimUnchanged;
+        c.guide[2] = s.previousOpacity;
+        c.guide[3] = s.tintAmount;
+        std::copy(s.highlightColor.begin(), s.highlightColor.end(), c.highlightColor);
 
         D3D11_MAPPED_SUBRESOURCE mapped{};
         if (FAILED(m_context->Map(m_constants.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
@@ -420,7 +431,8 @@ bool RenderEngine::renderOutput(Output& out, const Scene& scene, bool vsync)
         memcpy(mapped.pData, &c, sizeof(c));
         m_context->Unmap(m_constants.Get(), 0);
 
-        m_context->PSSetShaderResources(0, 1, &srv);
+        ID3D11ShaderResourceView* views[2] = {srv, previousSrv};
+        m_context->PSSetShaderResources(0, 2, views);
         m_context->Draw(6, 0);
     }
 

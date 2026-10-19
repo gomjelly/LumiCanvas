@@ -41,6 +41,23 @@ struct Surface {
     bool visible = true;
 };
 
+// How sequence steps are presented to help the user see what to draw next.
+enum class GuideMode {
+    Normal,    // current step as-is
+    Highlight, // parts that changed since the previous step at full strength, the rest dimmed
+    Onion,     // current step over a faint copy of the previous one
+};
+
+struct GuideSettings {
+    GuideMode mode = GuideMode::Highlight;
+    float dimUnchanged = 0.25f;  // Highlight: brightness of parts already drawn
+    bool tintChanges = false;    // Highlight: colour new parts with highlightColor
+    QColor highlightColor{0, 255, 140};
+    float previousOpacity = 0.35f; // Onion: strength of the previous step
+
+    bool operator==(const GuideSettings&) const = default;
+};
+
 // Stable per-index colour shared by the editor and the output test pattern.
 QColor surfaceColor(int index);
 
@@ -60,6 +77,9 @@ public:
 
     Sequence& sequence() { return m_sequence; }
     const Sequence& sequence() const { return m_sequence; }
+
+    const GuideSettings& guide() const { return m_guide; }
+    void setGuide(const GuideSettings& guide);
 
     int addSurface();
     void removeSurface(int index);
@@ -82,10 +102,12 @@ public:
 signals:
     void structureChanged();        // surfaces added, removed or replaced
     void surfaceChanged(int index); // geometry or properties of one surface
+    void guideChanged();
 
 private:
     QVector<Surface> m_surfaces;
     Sequence m_sequence;
+    GuideSettings m_guide;
     int m_nextNumber = 1;
 };
 

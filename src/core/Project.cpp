@@ -17,7 +17,8 @@ namespace lumi {
 
 namespace {
 
-// 1: surfaces only. 2: canvas size, fit mode, sequence content and progress.
+// 1: surfaces only. 2: canvas size, fit mode, sequence content and progress,
+// optional guide display settings.
 constexpr int kFormatVersion = 2;
 
 QString fitModeName(FitMode fit)
@@ -47,6 +48,57 @@ QString contentName(ContentType content)
     case ContentType::TestPattern: break;
     }
     return QStringLiteral("testPattern");
+}
+
+QString guideModeName(GuideMode mode)
+{
+    switch (mode) {
+    case GuideMode::Highlight: return QStringLiteral("highlight");
+    case GuideMode::Onion: return QStringLiteral("onion");
+    case GuideMode::Normal: break;
+    }
+    return QStringLiteral("normal");
+}
+
+GuideMode guideModeFromName(const QString& name)
+{
+    if (name == QLatin1String("normal"))
+        return GuideMode::Normal;
+    if (name == QLatin1String("onion"))
+        return GuideMode::Onion;
+    return GuideMode::Highlight;
+}
+
+// Keeps slider percentages readable in the file (0.2, not 0.200000003).
+double percent(float value)
+{
+    return qRound(value * 100.0) / 100.0;
+}
+
+QJsonObject guideToJson(const GuideSettings& g)
+{
+    return QJsonObject{
+        {"mode", guideModeName(g.mode)},
+        {"dimUnchanged", percent(g.dimUnchanged)},
+        {"tintChanges", g.tintChanges},
+        {"highlightColor", g.highlightColor.name()},
+        {"previousOpacity", percent(g.previousOpacity)},
+    };
+}
+
+GuideSettings guideFromJson(const QJsonObject& o)
+{
+    GuideSettings g;
+    if (o.isEmpty())
+        return g;
+    g.mode = guideModeFromName(o.value("mode").toString());
+    g.dimUnchanged = std::clamp(float(o.value("dimUnchanged").toDouble(g.dimUnchanged)), 0.0f, 1.0f);
+    g.tintChanges = o.value("tintChanges").toBool(g.tintChanges);
+    const QColor color = QColor::fromString(o.value("highlightColor").toString());
+    if (color.isValid())
+        g.highlightColor = color;
+    g.previousOpacity = std::clamp(float(o.value("previousOpacity").toDouble(g.previousOpacity)), 0.0f, 1.0f);
+    return g;
 }
 
 } // namespace
@@ -190,11 +242,20 @@ bool Project::setImage(int index, const QString& path)
     return true;
 }
 
+void Project::setGuide(const GuideSettings& guide)
+{
+    if (m_guide == guide)
+        return;
+    m_guide = guide;
+    emit guideChanged();
+}
+
 void Project::clear()
 {
     m_surfaces.clear();
     m_nextNumber = 1;
     m_sequence.clear();
+    setGuide(GuideSettings());
     emit structureChanged();
 }
 
@@ -227,6 +288,7 @@ bool Project::save(const QString& path, QString* error) const
         {"format", "LumiCanvas"},
         {"version", kFormatVersion},
         {"surfaces", surfaces},
+        {"guide", guideToJson(m_guide)},
     };
     if (!m_sequence.isEmpty()) {
         root["sequence"] = QJsonObject{
@@ -324,6 +386,7 @@ bool Project::load(const QString& path, QString* error, QStringList* missingFile
 
     m_surfaces = std::move(loaded);
     m_nextNumber = count() + 1;
+    setGuide(guideFromJson(root.value("guide").toObject()));
 
     const QJsonObject sequence = root.value("sequence").toObject();
     const QString folder = sequence.value("folder").toString();

@@ -38,11 +38,14 @@ public:
 
     // What should be projected right now; null while nothing has loaded yet.
     QImage displayImage() const { return m_display; }
+    // The step before the current one, or null while it is still loading or
+    // when the current step is the first.
+    QImage previousImage() const { return m_cache.value(m_current - 1); }
 
 signals:
     void loaded();               // the file list changed
     void currentChanged(int index);
-    void displayImageChanged();
+    void displayImageChanged(); // the current or previous step image changed
     void loadFailed(int index);
 
 private:

@@ -27,6 +27,16 @@ struct SceneSurface {
     std::array<float, 4> contentRect{0.0f, 0.0f, 1.0f, 1.0f}; // image placement in surface UV
     std::array<float, 4> tint{1.0f, 1.0f, 1.0f, 1.0f};
     float opacity = 1.0f;
+
+    // Step guide: how the image relates to the previous step. A null previous
+    // image with a guide mode set means "no previous step" (everything is new).
+    enum class Guide { Normal = 0, Highlight = 1, Onion = 2 } guide = Guide::Normal;
+    QImage previous;
+    std::array<float, 4> previousRect{0.0f, 0.0f, 1.0f, 1.0f};
+    float dimUnchanged = 0.25f;
+    float previousOpacity = 0.35f;
+    float tintAmount = 0.0f;
+    std::array<float, 4> highlightColor{0.0f, 1.0f, 0.55f, 1.0f};
 };
 
 struct Scene {

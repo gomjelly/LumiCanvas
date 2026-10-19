@@ -150,10 +150,10 @@ void Sequence::onImageLoaded(quint64 generation, int index, const QImage& image)
         return; // the user has moved on
 
     m_cache.insert(index, image);
-    if (index == m_current) {
+    if (index == m_current)
         m_display = image;
+    if (index == m_current || index == m_current - 1)
         emit displayImageChanged();
-    }
 }
 
 } // namespace lumi
