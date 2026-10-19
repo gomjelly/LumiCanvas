@@ -1,0 +1,6 @@
+# Keep LF everywhere, regardless of the local core.autocrlf setting.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
