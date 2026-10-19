@@ -24,12 +24,17 @@ int main(int argc, char* argv[])
     const QCommandLineOption windowedOutput(QStringLiteral("windowed-output"),
                                             QStringLiteral("Open a windowed output on startup."));
     parser.addOption(windowedOutput);
+    parser.addPositionalArgument(QStringLiteral("path"),
+                                 QStringLiteral("A .lumi project or a folder of step images."),
+                                 QStringLiteral("[path]"));
     parser.process(app);
 
     lumi::MainWindow window;
     if (!window.initialize())
         return 1;
     window.show();
+    if (!parser.positionalArguments().isEmpty())
+        window.openPath(parser.positionalArguments().constFirst());
     if (parser.isSet(windowedOutput))
         window.openOutput(QGuiApplication::primaryScreen(), false);
 

@@ -1,10 +1,12 @@
 # LumiCanvas
 
-Windows 전용 프로젝션 매핑 앱 (C++20 · Qt 6 · Direct3D 11).
+밑그림 없이 그림을 그릴 수 있게 도와주는 **프로젝션 가이드** 앱입니다 (Windows 전용, C++20 · Qt 6 · Direct3D 11).
+
+미리 준비한 단계별 이미지(예: AI로 만든 `step1.png … step12.png`)를 캔버스에 투사하고, 스페이스바로 다음 단계로 넘기면서 그 가이드를 따라 그립니다.
 
 ## 빌드
 
-요구 사항: Visual Studio 2022(C++ 워크로드), CMake 3.21+, Qt 6.8 (msvc2022_64)
+요구 사항: Visual Studio 2022(C++ 워크로드), CMake 3.21+, Qt 6.8 (msvc2022_64, Concurrent 모듈 포함)
 
 ```bash
 cmake --preset msvc
@@ -15,21 +17,39 @@ cmake --build --preset debug
 
 Qt 경로가 `C:/Qt/6.8.2/msvc2022_64`가 아니면 `CMakeUserPresets.json`에서 `CMAKE_PREFIX_PATH`를 덮어쓰세요.
 
+## 사용법
+
+1. **Sequence → Open Folder**로 단계 이미지 폴더를 엽니다. 폴더나 이미지를 창에 끌어다 놓아도 됩니다.
+   - 파일은 숫자 순서로 정렬됩니다 (`step2`가 `step10`보다 앞).
+2. **Output → Open Output**으로 프로젝터에 출력 창을 엽니다.
+3. **T**(정렬 패턴)를 켜고, 편집기에서 4개 코너를 실제 캔버스 모서리에 맞춥니다.
+   - 속성의 **Canvas**에 캔버스 실제 크기(mm)를 넣으면 이미지 비율이 유지됩니다.
+4. **T**를 다시 눌러 끄고, 가이드를 따라 그립니다.
+5. **File → Save**로 저장하면 정렬 상태와 현재 단계가 함께 저장됩니다.
+
+| 키 | 동작 |
+|---|---|
+| Space / PageDown | 다음 단계 |
+| Backspace / PageUp | 이전 단계 |
+| Home / End | 처음 / 마지막 단계 |
+| H | 가이드 켜기/끄기 (실제 칠한 색 확인용) |
+| T | 정렬 패턴 |
+| Esc (출력 창) | 출력 닫기 |
+| 화살표 / Shift+화살표 | 선택한 코너 1px / 10px 이동 |
+
+단계 키는 출력 창에 포커스가 있을 때도 동작하고, PageDown/PageUp을 보내는 프레젠테이션 리모컨으로도 넘길 수 있습니다.
+
+명령줄: `LumiCanvas.exe [프로젝트.lumi | 이미지 폴더] [--windowed-output]`
+
 ## 구조
 
 | 경로 | 역할 |
 |---|---|
-| `src/core/Project` | 데이터 모델(서피스, 코너, 콘텐츠), `.lumi` JSON 저장/불러오기 |
-| `src/render/RenderEngine` | D3D11 디바이스 + 렌더 스레드. 출력마다 flip-model 스왑체인 |
-| `src/render/OutputWindow` | 프로젝터 출력용 네이티브 창 (전체화면/창 모드) |
-| `src/ui/MainWindow` | 편집기 UI (서피스 목록, 속성, 출력 관리) |
-| `src/ui/WarpEditor` | 코너 드래그/키보드 미세조정 캔버스 |
-| `resources/shaders/warp.hlsl` | 역 호모그래피 기반 원근 보정 쿼드 워프 + 테스트 패턴 |
-
-UI 스레드와 렌더 스레드는 분리되어 있습니다. GUI는 불변 `Scene` 스냅샷만 넘기고, 렌더 스레드가 모든 출력에 그립니다.
-
-## 사용법
-
-- **Output → Open Output**: 선택한 디스플레이에 출력 창을 엽니다. 출력 창에서 `Esc`를 누르면 닫힙니다.
-- 편집기에서 코너나 서피스를 드래그합니다. 화살표는 1px, `Shift`+화살표는 10px 이동, `Tab`은 코너 순환입니다.
-- `--windowed-output` 옵션으로 실행하면 시작할 때 창 모드 출력이 열립니다 (개발용).
+| `src/core/Project` | 서피스(코너, 캔버스 크기, 배치 방식, 콘텐츠), `.lumi` JSON 저장/불러오기 |
+| `src/core/Sequence` | 단계 이미지 목록, 현재 단계, 백그라운드 미리 불러오기 |
+| `src/core/ImageLoader` | 스레드에서 안전하게 쓸 수 있는 이미지 로더 |
+| `src/render/RenderEngine` | D3D11 디바이스와 렌더 스레드, 출력마다 flip-model 스왑체인 |
+| `src/render/OutputWindow` | 프로젝터 출력용 네이티브 창 |
+| `src/ui/MainWindow` | 편집기 UI (시퀀스, 서피스, 출력 패널) |
+| `src/ui/WarpEditor` | 코너 정렬 캔버스 |
+| `resources/shaders/warp.hlsl` | 원근 보정 쿼드 워프, 배치(Fit/Fill/Stretch), 테스트 패턴 |

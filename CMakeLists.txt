@@ -9,13 +9,17 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Concurrent)
 qt_standard_project_setup()
 
 qt_add_executable(LumiCanvas WIN32
     src/main.cpp
+    src/core/ImageLoader.h
+    src/core/ImageLoader.cpp
     src/core/Project.h
     src/core/Project.cpp
+    src/core/Sequence.h
+    src/core/Sequence.cpp
     src/render/RenderEngine.h
     src/render/RenderEngine.cpp
     src/render/OutputWindow.h
@@ -43,7 +47,7 @@ if(MSVC)
     target_compile_options(LumiCanvas PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus)
 endif()
 
-target_link_libraries(LumiCanvas PRIVATE Qt6::Widgets d3d11 dxgi d3dcompiler)
+target_link_libraries(LumiCanvas PRIVATE Qt6::Widgets Qt6::Concurrent d3d11 dxgi d3dcompiler)
 
 # Copy the Qt runtime next to the executable so it runs straight from the build tree.
 option(LUMI_DEPLOY_QT "Run windeployqt after each build" ON)

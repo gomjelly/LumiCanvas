@@ -1,9 +1,12 @@
 #pragma once
 
+#include "core/Sequence.h"
+
 #include <QColor>
 #include <QImage>
 #include <QObject>
 #include <QPointF>
+#include <QSizeF>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -13,7 +16,14 @@
 
 namespace lumi {
 
-enum class ContentType { TestPattern, Image };
+enum class ContentType { TestPattern, Image, Sequence };
+
+// How content is placed on the physical canvas.
+enum class FitMode {
+    Fit,     // whole image visible, aspect kept, empty bars stay dark
+    Fill,    // canvas fully covered, aspect kept, image cropped
+    Stretch, // image distorted to the canvas
+};
 
 struct Surface {
     QUuid id = QUuid::createUuid();
@@ -21,6 +31,9 @@ struct Surface {
     // Corners in normalized output space (0..1, y down), order: TL, TR, BR, BL.
     std::array<QPointF, 4> corners{QPointF(0.25, 0.25), QPointF(0.75, 0.25),
                                    QPointF(0.75, 0.75), QPointF(0.25, 0.75)};
+    // Real-world size of what the corners are aligned to; only the aspect matters.
+    QSizeF canvasSizeMm{600.0, 450.0};
+    FitMode fit = FitMode::Fit;
     ContentType content = ContentType::TestPattern;
     QString imagePath;
     QImage image; // RGBA8888, loaded from imagePath; not serialized
@@ -30,6 +43,9 @@ struct Surface {
 
 // Stable per-index colour shared by the editor and the output test pattern.
 QColor surfaceColor(int index);
+
+// Placement of content inside the canvas as {x, y, width, height} in canvas UV.
+std::array<float, 4> contentRect(FitMode fit, QSizeF canvas, QSize content);
 
 class Project : public QObject {
     Q_OBJECT
@@ -42,11 +58,16 @@ public:
     bool isValidIndex(int index) const { return index >= 0 && index < count(); }
     const Surface& surface(int index) const { return m_surfaces.at(index); }
 
+    Sequence& sequence() { return m_sequence; }
+    const Sequence& sequence() const { return m_sequence; }
+
     int addSurface();
     void removeSurface(int index);
     void setCorner(int index, int corner, QPointF pos);
     void translate(int index, QPointF delta);
     void setName(int index, const QString& name);
+    void setCanvasSize(int index, QSizeF sizeMm);
+    void setFitMode(int index, FitMode fit);
     void setOpacity(int index, float opacity);
     void setVisible(int index, bool visible);
     // Switching to Image only succeeds when an image path is already set.
@@ -55,14 +76,16 @@ public:
 
     void clear();
     bool save(const QString& path, QString* error) const;
-    bool load(const QString& path, QString* error, QStringList* missingImages);
+    // missingFiles collects images or folders that could not be found.
+    bool load(const QString& path, QString* error, QStringList* missingFiles);
 
 signals:
-    void structureChanged();      // surfaces added, removed or replaced
+    void structureChanged();        // surfaces added, removed or replaced
     void surfaceChanged(int index); // geometry or properties of one surface
 
 private:
     QVector<Surface> m_surfaces;
+    Sequence m_sequence;
     int m_nextNumber = 1;
 };
 

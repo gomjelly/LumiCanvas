@@ -10,6 +10,7 @@ cbuffer SurfaceConstants : register(b0)
     float4 hRow0;      // inverse homography rows: canvas (x, y, 1) -> content (u, v, w)
     float4 hRow1;
     float4 hRow2;
+    float4 contentRect; // image placement in surface UV: xy offset, zw size
     float4 tint;
     float4 params;     // x: opacity, y: 1 = texture, 0 = test pattern
 };
@@ -71,7 +72,12 @@ float4 PSMain(VSOutput input) : SV_Target
     float w = dot(hRow2.xyz, p);
     float2 uv = saturate(float2(dot(hRow0.xyz, p), dot(hRow1.xyz, p)) / w);
 
-    float4 texColor = contentTexture.Sample(contentSampler, uv);
+    // Fit leaves bars outside the image transparent; Fill crops via the clamp.
+    float2 contentUv = (uv - contentRect.xy) / contentRect.zw;
+    bool insideContent = all(contentUv >= 0.0) && all(contentUv <= 1.0);
+    float4 texColor = contentTexture.Sample(contentSampler, saturate(contentUv));
+    texColor.a *= insideContent ? 1.0 : 0.0;
+
     float4 color = params.y > 0.5 ? texColor : float4(testPattern(uv), 1.0);
     color.a *= params.x;
     return color;

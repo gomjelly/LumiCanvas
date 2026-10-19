@@ -198,7 +198,11 @@ void WarpEditor::drawSurface(QPainter& p, int index, bool selected) const
 
     const QPointF center = mapped ? t.map(QPointF(0.5, 0.5)) : quad.boundingRect().center();
     p.setPen(Qt::white);
-    p.drawText(QRectF(center - QPointF(120, 10), QSizeF(240, 20)), Qt::AlignCenter, s.name);
+    const QString label = QStringLiteral("%1\n%2 × %3 mm")
+                              .arg(s.name)
+                              .arg(s.canvasSizeMm.width(), 0, 'f', 0)
+                              .arg(s.canvasSizeMm.height(), 0, 'f', 0);
+    p.drawText(QRectF(center - QPointF(120, 20), QSizeF(240, 40)), Qt::AlignCenter, label);
 }
 
 void WarpEditor::drawHandles(QPainter& p, int index) const

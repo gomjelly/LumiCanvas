@@ -1,9 +1,10 @@
 #include "core/Project.h"
 
+#include "core/ImageLoader.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,20 +17,36 @@ namespace lumi {
 
 namespace {
 
-constexpr int kMaxTextureSize = 8192;
-constexpr int kFormatVersion = 1;
+// 1: surfaces only. 2: canvas size, fit mode, sequence content and progress.
+constexpr int kFormatVersion = 2;
 
-QImage loadImage(const QString& path)
+QString fitModeName(FitMode fit)
 {
-    QImageReader reader(path);
-    reader.setAutoTransform(true);
-    QImage image = reader.read();
-    if (image.isNull())
-        return {};
-    if (image.width() > kMaxTextureSize || image.height() > kMaxTextureSize)
-        image = image.scaled(kMaxTextureSize, kMaxTextureSize, Qt::KeepAspectRatio,
-                             Qt::SmoothTransformation);
-    return image.convertToFormat(QImage::Format_RGBA8888);
+    switch (fit) {
+    case FitMode::Fill: return QStringLiteral("fill");
+    case FitMode::Stretch: return QStringLiteral("stretch");
+    case FitMode::Fit: break;
+    }
+    return QStringLiteral("fit");
+}
+
+FitMode fitModeFromName(const QString& name)
+{
+    if (name == QLatin1String("fill"))
+        return FitMode::Fill;
+    if (name == QLatin1String("stretch"))
+        return FitMode::Stretch;
+    return FitMode::Fit;
+}
+
+QString contentName(ContentType content)
+{
+    switch (content) {
+    case ContentType::Image: return QStringLiteral("image");
+    case ContentType::Sequence: return QStringLiteral("sequence");
+    case ContentType::TestPattern: break;
+    }
+    return QStringLiteral("testPattern");
 }
 
 } // namespace
@@ -38,6 +55,29 @@ QColor surfaceColor(int index)
 {
     const double hue = std::fmod(0.08 + index * 0.618033988749895, 1.0);
     return QColor::fromHsvF(float(hue), 0.65f, 0.95f);
+}
+
+std::array<float, 4> contentRect(FitMode fit, QSizeF canvas, QSize content)
+{
+    if (fit == FitMode::Stretch || canvas.isEmpty() || content.isEmpty())
+        return {0.0f, 0.0f, 1.0f, 1.0f};
+    const double canvasAspect = canvas.width() / canvas.height();
+    const double contentAspect = double(content.width()) / content.height();
+    const bool wider = contentAspect > canvasAspect;
+    double w = 1.0;
+    double h = 1.0;
+    if (fit == FitMode::Fit) {
+        if (wider)
+            h = canvasAspect / contentAspect; // full width, bars top and bottom
+        else
+            w = contentAspect / canvasAspect; // full height, bars left and right
+    } else {
+        if (wider)
+            w = contentAspect / canvasAspect; // full height, sides cropped
+        else
+            h = canvasAspect / contentAspect; // full width, top and bottom cropped
+    }
+    return {float((1.0 - w) / 2), float((1.0 - h) / 2), float(w), float(h)};
 }
 
 Project::Project(QObject* parent)
@@ -91,6 +131,22 @@ void Project::setName(int index, const QString& name)
     emit surfaceChanged(index);
 }
 
+void Project::setCanvasSize(int index, QSizeF sizeMm)
+{
+    if (!isValidIndex(index) || sizeMm.isEmpty() || m_surfaces[index].canvasSizeMm == sizeMm)
+        return;
+    m_surfaces[index].canvasSizeMm = sizeMm;
+    emit surfaceChanged(index);
+}
+
+void Project::setFitMode(int index, FitMode fit)
+{
+    if (!isValidIndex(index) || m_surfaces[index].fit == fit)
+        return;
+    m_surfaces[index].fit = fit;
+    emit surfaceChanged(index);
+}
+
 void Project::setOpacity(int index, float opacity)
 {
     if (!isValidIndex(index))
@@ -138,6 +194,7 @@ void Project::clear()
 {
     m_surfaces.clear();
     m_nextNumber = 1;
+    m_sequence.clear();
     emit structureChanged();
 }
 
@@ -155,7 +212,9 @@ bool Project::save(const QString& path, QString* error) const
             {"id", s.id.toString(QUuid::WithoutBraces)},
             {"name", s.name},
             {"corners", corners},
-            {"content", s.content == ContentType::Image ? "image" : "testPattern"},
+            {"canvasSizeMm", QJsonArray{s.canvasSizeMm.width(), s.canvasSizeMm.height()}},
+            {"fit", fitModeName(s.fit)},
+            {"content", contentName(s.content)},
             {"opacity", s.opacity},
             {"visible", s.visible},
         };
@@ -164,11 +223,17 @@ bool Project::save(const QString& path, QString* error) const
         surfaces.append(o);
     }
 
-    const QJsonObject root{
+    QJsonObject root{
         {"format", "LumiCanvas"},
         {"version", kFormatVersion},
         {"surfaces", surfaces},
     };
+    if (!m_sequence.isEmpty()) {
+        root["sequence"] = QJsonObject{
+            {"folder", dir.relativeFilePath(m_sequence.folder())},
+            {"current", m_sequence.currentIndex()},
+        };
+    }
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
@@ -185,7 +250,7 @@ bool Project::save(const QString& path, QString* error) const
     return true;
 }
 
-bool Project::load(const QString& path, QString* error, QStringList* missingImages)
+bool Project::load(const QString& path, QString* error, QStringList* missingFiles)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -232,6 +297,11 @@ bool Project::load(const QString& path, QString* error, QStringList* missingImag
             }
         }
 
+        const QJsonArray canvasSize = o.value("canvasSizeMm").toArray();
+        const QSizeF sizeMm(canvasSize.at(0).toDouble(), canvasSize.at(1).toDouble());
+        if (!sizeMm.isEmpty())
+            s.canvasSizeMm = sizeMm;
+        s.fit = fitModeFromName(o.value("fit").toString());
         s.opacity = std::clamp(float(o.value("opacity").toDouble(1.0)), 0.0f, 1.0f);
         s.visible = o.value("visible").toBool(true);
 
@@ -239,17 +309,34 @@ bool Project::load(const QString& path, QString* error, QStringList* missingImag
         if (!image.isEmpty()) {
             s.imagePath = QDir::cleanPath(dir.absoluteFilePath(image));
             s.image = loadImage(s.imagePath);
-            if (s.image.isNull() && missingImages)
-                missingImages->append(QDir::toNativeSeparators(s.imagePath));
+            if (s.image.isNull() && missingFiles)
+                missingFiles->append(QDir::toNativeSeparators(s.imagePath));
         }
-        s.content = (o.value("content").toString() == "image" && !s.imagePath.isEmpty())
-                        ? ContentType::Image
-                        : ContentType::TestPattern;
+        const QString content = o.value("content").toString();
+        if (content == QLatin1String("sequence"))
+            s.content = ContentType::Sequence;
+        else if (content == QLatin1String("image") && !s.imagePath.isEmpty())
+            s.content = ContentType::Image;
+        else
+            s.content = ContentType::TestPattern;
         loaded.push_back(std::move(s));
     }
 
     m_surfaces = std::move(loaded);
     m_nextNumber = count() + 1;
+
+    const QJsonObject sequence = root.value("sequence").toObject();
+    const QString folder = sequence.value("folder").toString();
+    if (folder.isEmpty()) {
+        m_sequence.clear();
+    } else {
+        const QString absolute = QDir::cleanPath(dir.absoluteFilePath(folder));
+        if (m_sequence.load(absolute))
+            m_sequence.setCurrentIndex(sequence.value("current").toInt());
+        else if (missingFiles)
+            missingFiles->append(QDir::toNativeSeparators(absolute));
+    }
+
     emit structureChanged();
     return true;
 }

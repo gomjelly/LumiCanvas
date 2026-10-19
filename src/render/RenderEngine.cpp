@@ -23,6 +23,7 @@ struct SurfaceConstants {
     float hRow0[4];
     float hRow1[4];
     float hRow2[4];
+    float contentRect[4];
     float tint[4];
     float params[4]; // x: opacity, y: 1 = texture, 0 = test pattern
 };
@@ -408,6 +409,7 @@ bool RenderEngine::renderOutput(Output& out, const Scene& scene, bool vsync)
         c.hRow0[0] = float(inverse.m11()); c.hRow0[1] = float(inverse.m21()); c.hRow0[2] = float(inverse.m31());
         c.hRow1[0] = float(inverse.m12()); c.hRow1[1] = float(inverse.m22()); c.hRow1[2] = float(inverse.m32());
         c.hRow2[0] = float(inverse.m13()); c.hRow2[1] = float(inverse.m23()); c.hRow2[2] = float(inverse.m33());
+        std::copy(s.contentRect.begin(), s.contentRect.end(), c.contentRect);
         std::copy(s.tint.begin(), s.tint.end(), c.tint);
         c.params[0] = s.opacity;
         c.params[1] = srv ? 1.0f : 0.0f;

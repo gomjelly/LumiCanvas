@@ -21,6 +21,8 @@ public:
 signals:
     // The owner must detach the window from the render engine before deleting it.
     void closeRequested(lumi::OutputWindow* window);
+    // Keys the window does not handle itself, so the operator can step from the projector.
+    void keyPressed(QKeyCombination key);
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;

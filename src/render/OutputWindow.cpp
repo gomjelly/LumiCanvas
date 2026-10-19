@@ -33,7 +33,7 @@ void OutputWindow::keyPressEvent(QKeyEvent* event)
         emit closeRequested(this);
         return;
     }
-    QWindow::keyPressEvent(event);
+    emit keyPressed(event->keyCombination());
 }
 
 void OutputWindow::closeEvent(QCloseEvent* event)

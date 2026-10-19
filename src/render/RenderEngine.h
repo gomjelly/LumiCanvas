@@ -24,6 +24,7 @@ namespace lumi {
 struct SceneSurface {
     std::array<QPointF, 4> corners; // normalized output space, TL, TR, BR, BL
     QImage image;                   // RGBA8888; null draws the test pattern
+    std::array<float, 4> contentRect{0.0f, 0.0f, 1.0f, 1.0f}; // image placement in surface UV
     std::array<float, 4> tint{1.0f, 1.0f, 1.0f, 1.0f};
     float opacity = 1.0f;
 };
