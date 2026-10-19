@@ -453,7 +453,9 @@ G: 가이드 표시 방식 전환</translation>
     </message>
     <message numerus="yes">
         <source>%n output(s) open  ·  Esc on an output closes it</source>
-        <translation><numerusform>출력 %n개 열림  ·  출력 창에서 Esc를 누르면 닫힘</numerusform></translation>
+        <translation>
+            <numerusform>출력 %n개 열림  ·  출력 창에서 Esc를 누르면 닫힘</numerusform>
+        </translation>
     </message>
 </context>
 <context>
