@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/History.h"
 #include "core/Project.h"
 #include "render/RenderEngine.h"
 
@@ -18,6 +19,7 @@ class QGroupBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QMenu;
 class QPushButton;
 class QScreen;
 class QSlider;
@@ -92,7 +94,13 @@ private:
     void updateOutputStatus();
     void handleOutputKey(QKeyCombination key);
 
+    // Applies change() to the selected surface as one undo step.
+    template <class Change>
+    void recordEdit(const QString& text, Change&& change, int mergeId = History::NoMerge);
+    void createLanguageMenu(QMenu* menu);
+
     Project m_project;
+    History m_history{&m_project};
     RenderEngine m_engine;
     WarpEditor* m_editor = nullptr;
     int m_selected = -1;

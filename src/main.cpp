@@ -3,8 +3,35 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QGuiApplication>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QScreen>
+#include <QSettings>
 #include <QStyleHints>
+#include <QTranslator>
+
+namespace {
+
+// Installs the UI language chosen in View > Language ("system", "ko" or "en").
+void installTranslators(QApplication& app)
+{
+    const QString language = QSettings().value(QStringLiteral("language"), QStringLiteral("system")).toString();
+    const QLocale locale = language == QLatin1String("system") ? QLocale::system() : QLocale(language);
+    QLocale::setDefault(locale);
+
+    // English is the source language, so it needs no catalog.
+    auto* appTranslator = new QTranslator(&app);
+    if (appTranslator->load(locale, QStringLiteral("lumicanvas"), QStringLiteral("_"), QStringLiteral(":/i18n")))
+        QApplication::installTranslator(appTranslator);
+
+    // Qt's own strings: standard buttons, file dialogs, context menus.
+    auto* qtTranslator = new QTranslator(&app);
+    if (qtTranslator->load(locale, QStringLiteral("qt"), QStringLiteral("_"),
+                           QLibraryInfo::path(QLibraryInfo::TranslationsPath)))
+        QApplication::installTranslator(qtTranslator);
+}
+
+} // namespace
 
 int main(int argc, char* argv[])
 {
@@ -16,9 +43,10 @@ int main(int argc, char* argv[])
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
 #endif
+    installTranslators(app);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Projection mapping for Windows"));
+    parser.setApplicationDescription(QStringLiteral("Projection guide for drawing"));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption windowedOutput(QStringLiteral("windowed-output"),

@@ -6,6 +6,7 @@
 
 namespace lumi {
 
+class History;
 class Project;
 
 // 2D editor for the output canvas: shows every surface's quad and lets the
@@ -14,7 +15,7 @@ class WarpEditor : public QWidget {
     Q_OBJECT
 
 public:
-    explicit WarpEditor(Project* project, QWidget* parent = nullptr);
+    WarpEditor(Project* project, History* history, QWidget* parent = nullptr);
 
     int selectedSurface() const { return m_selected; }
     // Does not emit selectionChanged.
@@ -50,6 +51,7 @@ private:
     void drawHandles(QPainter& p, int index) const;
 
     Project* m_project;
+    History* m_history;
     QSize m_canvasSize{1920, 1080};
     int m_selected = -1;
     int m_selectedCorner = -1;

@@ -1,5 +1,6 @@
 #include "ui/WarpEditor.h"
 
+#include "core/History.h"
 #include "core/Project.h"
 
 #include <QKeyEvent>
@@ -20,9 +21,10 @@ constexpr int kGridDivisions = 8;
 
 } // namespace
 
-WarpEditor::WarpEditor(Project* project, QWidget* parent)
+WarpEditor::WarpEditor(Project* project, History* history, QWidget* parent)
     : QWidget(parent)
     , m_project(project)
+    , m_history(history)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -247,6 +249,8 @@ void WarpEditor::mousePressEvent(QMouseEvent* event)
         return;
     }
     const QPointF cursor = toNormalized(pos);
+    // One undo step per drag; closed in mouseReleaseEvent.
+    m_history->begin(hit.corner >= 0 ? tr("Move Corner") : tr("Move Surface"));
     if (hit.corner >= 0) {
         m_drag = Drag::Corner;
         m_grabOffset = m_project->surface(hit.surface).corners[hit.corner] - cursor;
@@ -281,8 +285,10 @@ void WarpEditor::mouseMoveEvent(QMouseEvent* event)
 
 void WarpEditor::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton)
+    if (event->button() == Qt::LeftButton && m_drag != Drag::None) {
         m_drag = Drag::None;
+        m_history->end();
+    }
     QWidget::mouseReleaseEvent(event);
 }
 
@@ -311,12 +317,17 @@ void WarpEditor::keyPressEvent(QKeyEvent* event)
     const double pixels = (event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
     const QPointF delta(direction.x() * pixels / m_canvasSize.width(),
                         direction.y() * pixels / m_canvasSize.height());
+    // Repeated nudges of the same corner (or surface) undo as one step.
+    const int target = m_selected * 5 + (m_selectedCorner >= 0 ? m_selectedCorner : 4);
+    m_history->begin(m_selectedCorner >= 0 ? tr("Nudge Corner") : tr("Nudge Surface"),
+                     History::MergeNudge, target);
     if (m_selectedCorner >= 0) {
         const QPointF corner = m_project->surface(m_selected).corners[m_selectedCorner];
         m_project->setCorner(m_selected, m_selectedCorner, corner + delta);
     } else {
         m_project->translate(m_selected, delta);
     }
+    m_history->end();
 }
 
 } // namespace lumi

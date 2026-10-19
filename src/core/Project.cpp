@@ -103,6 +103,19 @@ GuideSettings guideFromJson(const QJsonObject& o)
 
 } // namespace
 
+bool sameSurface(const Surface& a, const Surface& b)
+{
+    return a.id == b.id && a.name == b.name && a.corners == b.corners
+           && a.canvasSizeMm == b.canvasSizeMm && a.fit == b.fit && a.content == b.content
+           && a.imagePath == b.imagePath && a.image.cacheKey() == b.image.cacheKey()
+           && a.opacity == b.opacity && a.visible == b.visible;
+}
+
+bool sameSurfaces(const QVector<Surface>& a, const QVector<Surface>& b)
+{
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(), sameSurface);
+}
+
 QColor surfaceColor(int index)
 {
     const double hue = std::fmod(0.08 + index * 0.618033988749895, 1.0);
@@ -240,6 +253,24 @@ bool Project::setImage(int index, const QString& path)
     s.content = ContentType::Image;
     emit surfaceChanged(index);
     return true;
+}
+
+void Project::restoreSurfaces(const QVector<Surface>& surfaces)
+{
+    const bool sameLayout = std::equal(m_surfaces.begin(), m_surfaces.end(), surfaces.begin(),
+                                       surfaces.end(),
+                                       [](const Surface& a, const Surface& b) { return a.id == b.id; });
+    if (!sameLayout) {
+        m_surfaces = surfaces;
+        emit structureChanged();
+        return;
+    }
+    for (int i = 0; i < count(); ++i) {
+        if (!sameSurface(m_surfaces[i], surfaces[i])) {
+            m_surfaces[i] = surfaces[i];
+            emit surfaceChanged(i);
+        }
+    }
 }
 
 void Project::setGuide(const GuideSettings& guide)

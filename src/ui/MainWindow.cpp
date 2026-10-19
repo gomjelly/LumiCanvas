@@ -4,6 +4,7 @@
 #include "render/OutputWindow.h"
 #include "ui/WarpEditor.h"
 
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -28,6 +29,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QScreen>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStandardPaths>
@@ -66,7 +68,7 @@ QToolButton* actionButton(QAction* action)
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    m_editor = new WarpEditor(&m_project, this);
+    m_editor = new WarpEditor(&m_project, &m_history, this);
     setCentralWidget(m_editor);
     setAcceptDrops(true);
 
@@ -147,6 +149,14 @@ void MainWindow::createActions()
     fileMenu->addSeparator();
     addAction(fileMenu, tr("E&xit"), {QKeySequence::Quit}, &QWidget::close);
 
+    QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
+    QAction* undoAction = m_history.stack()->createUndoAction(this, tr("&Undo"));
+    undoAction->setShortcuts(QKeySequence::Undo);
+    QAction* redoAction = m_history.stack()->createRedoAction(this, tr("&Redo"));
+    redoAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Y), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z)});
+    editMenu->addAction(undoAction);
+    editMenu->addAction(redoAction);
+
     QMenu* sequenceMenu = menuBar()->addMenu(tr("Se&quence"));
     QAction* openFolderAction = addAction(sequenceMenu, tr("&Open Folder..."),
                                           {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O)},
@@ -197,6 +207,9 @@ void MainWindow::createActions()
     addAction(outputMenu, tr("&Close All Outputs"), {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return)},
               &MainWindow::closeAllOutputs);
 
+    QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
+    createLanguageMenu(viewMenu->addMenu(tr("&Language")));
+
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     QAction* aboutAction = helpMenu->addAction(tr("&About LumiCanvas"));
     connect(aboutAction, &QAction::triggered, this, [this] {
@@ -219,6 +232,37 @@ void MainWindow::createActions()
     toolBar->addAction(removeSurfaceAction);
     toolBar->addSeparator();
     toolBar->addAction(openOutputAction);
+}
+
+void MainWindow::createLanguageMenu(QMenu* menu)
+{
+    // Language names are shown in their own language so they can be found in either UI.
+    const QList<std::pair<QString, QString>> languages{
+        {QStringLiteral("system"), tr("System Default")},
+        {QStringLiteral("ko"), QStringLiteral("한국어")},
+        {QStringLiteral("en"), QStringLiteral("English")},
+    };
+    const QString current = QSettings().value(QStringLiteral("language"), QStringLiteral("system")).toString();
+    auto* group = new QActionGroup(menu);
+    for (const auto& [code, name] : languages) {
+        QAction* action = menu->addAction(name);
+        action->setCheckable(true);
+        action->setChecked(code == current);
+        group->addAction(action);
+        connect(action, &QAction::triggered, this, [this, code] {
+            QSettings().setValue(QStringLiteral("language"), code);
+            QMessageBox::information(this, tr("Language"),
+                                     tr("The new language is used after LumiCanvas restarts."));
+        });
+    }
+}
+
+template <class Change>
+void MainWindow::recordEdit(const QString& text, Change&& change, int mergeId)
+{
+    m_history.begin(text, mergeId, m_selected);
+    change();
+    m_history.end();
 }
 
 void MainWindow::createDocks()
@@ -328,7 +372,7 @@ QWidget* MainWindow::createGuidePanel()
         updateGuide([on](GuideSettings& g) { g.tintChanges = on; });
     });
     m_tintColorButton = new QToolButton;
-    m_tintColorButton->setToolTip(tr("Highlight colour"));
+    m_tintColorButton->setToolTip(tr("Choose the highlight colour"));
     connect(m_tintColorButton, &QToolButton::clicked, this, &MainWindow::chooseHighlightColor);
     auto* tintRow = new QHBoxLayout;
     tintRow->addWidget(m_tintCheck, 1);
@@ -410,7 +454,10 @@ QWidget* MainWindow::createSurfacesPanel()
 
     m_nameEdit = new QLineEdit;
     connect(m_nameEdit, &QLineEdit::textEdited, this,
-            [this](const QString& text) { m_project.setName(m_selected, text); });
+            [this](const QString& text) {
+                recordEdit(tr("Rename Surface"), [&] { m_project.setName(m_selected, text); },
+                           History::MergeRename);
+            });
     form->addRow(tr("Name"), m_nameEdit);
 
     // Combo order matches ContentType.
@@ -450,7 +497,9 @@ QWidget* MainWindow::createSurfacesPanel()
     m_fitCombo = new QComboBox;
     m_fitCombo->addItems({tr("Fit (keep aspect)"), tr("Fill (crop)"), tr("Stretch")});
     connect(m_fitCombo, &QComboBox::activated, this,
-            [this](int index) { m_project.setFitMode(m_selected, FitMode(index)); });
+            [this](int index) {
+                recordEdit(tr("Change Placement"), [&] { m_project.setFitMode(m_selected, FitMode(index)); });
+            });
     form->addRow(tr("Placement"), m_fitCombo);
 
     m_opacitySlider = new QSlider(Qt::Horizontal);
@@ -458,7 +507,10 @@ QWidget* MainWindow::createSurfacesPanel()
     m_opacityLabel = new QLabel;
     m_opacityLabel->setMinimumWidth(40);
     connect(m_opacitySlider, &QSlider::valueChanged, this,
-            [this](int value) { m_project.setOpacity(m_selected, value / 100.0f); });
+            [this](int value) {
+                recordEdit(tr("Change Opacity"), [&] { m_project.setOpacity(m_selected, value / 100.0f); },
+                           History::MergeOpacity);
+            });
     auto* opacityRow = new QHBoxLayout;
     opacityRow->addWidget(m_opacitySlider, 1);
     opacityRow->addWidget(m_opacityLabel);
@@ -466,7 +518,9 @@ QWidget* MainWindow::createSurfacesPanel()
 
     m_visibleCheck = new QCheckBox(tr("Visible"));
     connect(m_visibleCheck, &QCheckBox::toggled, this,
-            [this](bool on) { m_project.setVisible(m_selected, on); });
+            [this](bool on) {
+                recordEdit(tr("Toggle Visibility"), [&] { m_project.setVisible(m_selected, on); });
+            });
     form->addRow(QString(), m_visibleCheck);
 
     layout->addWidget(m_propertiesBox);
@@ -514,6 +568,7 @@ void MainWindow::newProject()
     m_project.setName(canvas, tr("Canvas"));
     m_project.setContent(canvas, ContentType::Sequence);
     m_projectPath.clear();
+    m_history.clear();
     selectSurface(canvas);
     setWindowModified(false);
     updateTitle();
@@ -539,6 +594,7 @@ void MainWindow::openProjectFile(const QString& path)
         return;
     }
     m_projectPath = path;
+    m_history.clear();
     selectSurface(m_project.count() > 0 ? 0 : -1);
     setWindowModified(false);
     updateTitle();
@@ -667,9 +723,11 @@ void MainWindow::loadSequence(const QString& folder)
             return;
     }
     int target = m_selected;
-    if (!m_project.isValidIndex(target))
-        target = m_project.count() > 0 ? 0 : m_project.addSurface();
-    m_project.setContent(target, ContentType::Sequence);
+    recordEdit(tr("Show Sequence"), [&] {
+        if (!m_project.isValidIndex(target))
+            target = m_project.count() > 0 ? 0 : m_project.addSurface();
+        m_project.setContent(target, ContentType::Sequence);
+    });
     selectSurface(target);
 }
 
@@ -750,7 +808,9 @@ void MainWindow::setAlignmentMode(bool on)
 
 void MainWindow::addSurface()
 {
-    selectSurface(m_project.addSurface());
+    int index = -1;
+    recordEdit(tr("Add Surface"), [&] { index = m_project.addSurface(); });
+    selectSurface(index);
 }
 
 void MainWindow::removeSurface()
@@ -758,7 +818,7 @@ void MainWindow::removeSurface()
     if (!m_project.isValidIndex(m_selected))
         return;
     const int index = m_selected;
-    m_project.removeSurface(index);
+    recordEdit(tr("Remove Surface"), [&] { m_project.removeSurface(index); });
     selectSurface(std::min(index, m_project.count() - 1));
 }
 
@@ -782,7 +842,9 @@ void MainWindow::chooseImage()
     const QString path = QFileDialog::getOpenFileName(this, tr("Choose Image"), m_lastImageDir, imageFilter());
     if (!path.isEmpty()) {
         m_lastImageDir = QFileInfo(path).absolutePath();
-        if (!m_project.setImage(m_selected, path)) {
+        bool loaded = false;
+        recordEdit(tr("Set Image"), [&] { loaded = m_project.setImage(m_selected, path); });
+        if (!loaded) {
             QMessageBox::warning(this, tr("Choose Image"),
                                  tr("Could not load %1").arg(QDir::toNativeSeparators(path)));
         }
@@ -794,25 +856,20 @@ void MainWindow::onContentActivated(int index)
 {
     if (!m_project.isValidIndex(m_selected))
         return;
-    switch (ContentType(index)) {
-    case ContentType::TestPattern:
-        m_project.setContent(m_selected, ContentType::TestPattern);
-        break;
-    case ContentType::Image:
-        if (!m_project.setContent(m_selected, ContentType::Image))
-            chooseImage(); // no image yet
-        break;
-    case ContentType::Sequence:
-        m_project.setContent(m_selected, ContentType::Sequence);
-        if (m_project.sequence().isEmpty())
-            openSequenceFolder();
-        break;
-    }
+    const ContentType content = ContentType(index);
+    bool applied = false;
+    recordEdit(tr("Change Content"), [&] { applied = m_project.setContent(m_selected, content); });
+    if (content == ContentType::Image && !applied)
+        chooseImage(); // no image yet
+    else if (content == ContentType::Sequence && m_project.sequence().isEmpty())
+        openSequenceFolder();
 }
 
 void MainWindow::onCanvasSizeEdited()
 {
-    m_project.setCanvasSize(m_selected, QSizeF(m_canvasWidth->value(), m_canvasHeight->value()));
+    const QSizeF size(m_canvasWidth->value(), m_canvasHeight->value());
+    recordEdit(tr("Change Canvas Size"), [&] { m_project.setCanvasSize(m_selected, size); },
+               History::MergeCanvasSize);
 }
 
 void MainWindow::onStructureChanged()

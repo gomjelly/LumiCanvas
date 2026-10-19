@@ -37,6 +37,7 @@ Qt 경로가 `C:/Qt/6.8.2/msvc2022_64`가 아니면 `CMakeUserPresets.json`에�
 | G | 가이드 표시 방식 전환 (일반 → 새 부분 강조 → 겹쳐 보기) |
 | Esc (출력 창) | 출력 닫기 |
 | 화살표 / Shift+화살표 | 선택한 코너 1px / 10px 이동 |
+| Ctrl+Z / Ctrl+Y | 실행 취소 / 다시 실행 (정렬과 서피스 속성 변경) |
 
 ### 가이드 표시 방식 (Sequence 패널 → Guide Display)
 
@@ -48,12 +49,24 @@ Qt 경로가 `C:/Qt/6.8.2/msvc2022_64`가 아니면 `CMakeUserPresets.json`에�
 
 명령줄: `LumiCanvas.exe [프로젝트.lumi | 이미지 폴더] [--windowed-output]`
 
+### 언어
+
+**보기 → 언어**에서 한국어, English, 시스템 기본값 중에서 고릅니다. 바꾼 언어는 다시 시작하면 적용됩니다.
+
+UI 문자열을 바꾼 뒤에는 번역 파일을 갱신하세요. 그다음 `translations/lumicanvas_ko.ts`의 새 항목을 Qt Linguist 등으로 번역합니다.
+
+```bash
+cmake --build build --target update_translations --config Debug
+```
+
 ## 구조
 
 | 경로 | 역할 |
 |---|---|
 | `src/core/Project` | 서피스(코너, 캔버스 크기, 배치 방식, 콘텐츠), `.lumi` JSON 저장/불러오기 |
 | `src/core/Sequence` | 단계 이미지 목록, 현재 단계, 백그라운드 미리 불러오기 |
+| `src/core/History` | 실행 취소/다시 실행 (서피스 스냅샷 기반, 연속 편집은 한 단계로 합침) |
+| `translations/` | UI 번역 (.ts) |
 | `src/core/ImageLoader` | 스레드에서 안전하게 쓸 수 있는 이미지 로더 |
 | `src/render/RenderEngine` | D3D11 디바이스와 렌더 스레드, 출력마다 flip-model 스왑체인 |
 | `src/render/OutputWindow` | 프로젝터 출력용 네이티브 창 |

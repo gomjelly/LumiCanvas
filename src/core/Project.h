@@ -58,6 +58,10 @@ struct GuideSettings {
     bool operator==(const GuideSettings&) const = default;
 };
 
+// Field-by-field comparison; images compare by identity, not pixels.
+bool sameSurface(const Surface& a, const Surface& b);
+bool sameSurfaces(const QVector<Surface>& a, const QVector<Surface>& b);
+
 // Stable per-index colour shared by the editor and the output test pattern.
 QColor surfaceColor(int index);
 
@@ -93,6 +97,8 @@ public:
     // Switching to Image only succeeds when an image path is already set.
     bool setContent(int index, ContentType content);
     bool setImage(int index, const QString& path);
+    // Replaces all surfaces (undo/redo), emitting only the signals that apply.
+    void restoreSurfaces(const QVector<Surface>& surfaces);
 
     void clear();
     bool save(const QString& path, QString* error) const;
