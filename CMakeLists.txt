@@ -28,6 +28,8 @@ qt_add_executable(LumiCanvas WIN32
     src/render/OutputWindow.cpp
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp
+    src/ui/KeySettingsDialog.h
+    src/ui/KeySettingsDialog.cpp
     src/ui/WarpEditor.h
     src/ui/WarpEditor.cpp
 )

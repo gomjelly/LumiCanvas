@@ -37,6 +37,18 @@ struct SceneSurface {
     float previousOpacity = 0.35f;
     float tintAmount = 0.0f;
     std::array<float, 4> highlightColor{0.0f, 1.0f, 0.55f, 1.0f};
+
+    // Image adjustments, applied whatever the guide mode.
+    bool invert = false;
+    bool recolor = false;
+    std::array<float, 4> lineColor{1.0f, 1.0f, 1.0f, 1.0f};
+    float brightness = 1.0f;
+    float gridColumns = 0.0f;
+    float gridRows = 0.0f;
+    float gridStrength = 0.0f; // 0 = no grid
+
+    // Test pattern: corner being aligned (TL, TR, BR, BL), or -1.
+    int activeCorner = -1;
 };
 
 struct Scene {

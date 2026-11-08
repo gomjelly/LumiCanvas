@@ -17,6 +17,7 @@ namespace {
 // Steps kept decoded around the current one.
 constexpr int kCacheBehind = 1;
 constexpr int kCacheAhead = 2;
+constexpr int kThumbnailSize = 96;
 
 } // namespace
 
@@ -51,7 +52,26 @@ bool Sequence::load(const QString& folder)
     emit loaded();
     emit displayImageChanged();
     setCurrentIndex(0);
+    loadThumbnailFrom(0);
     return true;
+}
+
+void Sequence::loadThumbnailFrom(int index)
+{
+    if (index >= count())
+        return;
+    const quint64 generation = m_generation;
+    auto* watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, generation, index] {
+        watcher->deleteLater();
+        if (generation != m_generation)
+            return; // the folder was reloaded meanwhile
+        const QImage thumbnail = watcher->result();
+        if (!thumbnail.isNull())
+            emit thumbnailReady(index, thumbnail);
+        loadThumbnailFrom(index + 1);
+    });
+    watcher->setFuture(QtConcurrent::run(&loadThumbnail, filePath(index), kThumbnailSize));
 }
 
 void Sequence::clear()

@@ -2,6 +2,8 @@
 
 #include <QImageReader>
 
+#include <algorithm>
+
 namespace lumi {
 
 namespace {
@@ -21,6 +23,19 @@ QImage loadImage(const QString& path)
         image = image.scaled(kMaxTextureSize, kMaxTextureSize, Qt::KeepAspectRatio,
                              Qt::SmoothTransformation);
     return image.convertToFormat(QImage::Format_RGBA8888);
+}
+
+QImage loadThumbnail(const QString& path, int maxSide)
+{
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    const QSize size = reader.size();
+    if (size.isValid())
+        reader.setScaledSize(size.scaled(maxSide, maxSide, Qt::KeepAspectRatio));
+    QImage image = reader.read();
+    if (image.isNull() || std::max(image.width(), image.height()) <= maxSide)
+        return image;
+    return image.scaled(maxSide, maxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
 QStringList imageNameFilters()

@@ -3,6 +3,7 @@
 #include "core/History.h"
 #include "core/Project.h"
 #include "render/RenderEngine.h"
+#include "ui/KeySettingsDialog.h"
 
 #include <QHash>
 #include <QKeyCombination>
@@ -44,6 +45,7 @@ public:
     void openPath(const QString& path);
 
 protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
@@ -71,7 +73,14 @@ private:
     QWidget* createGuidePanel();
     void updateGuidePanel();
     void cycleGuideMode();
-    void chooseHighlightColor();
+    void chooseGuideColor(QColor GuideSettings::*color, bool GuideSettings::*enable, const QString& title);
+    void setPeeking(bool peeking);
+
+    QList<KeyBinding> keyBindings() const;
+    void applyKeyBindings(const QList<KeyBinding>& bindings);
+    void loadKeyBindings();
+    void openKeySettings();
+    void updateKeyHint();
 
     void addSurface();
     void removeSurface();
@@ -79,11 +88,13 @@ private:
     void chooseImage();
     void onContentActivated(int index);
     void onCanvasSizeEdited();
+    void onCornerEdited(Qt::Orientation axis, double pixels);
     void onStructureChanged();
     void onSurfaceChanged(int index);
     void updatePropertyPanel();
     void syncEngine();
     void applyGuide(SceneSurface& out, const Surface& surface) const;
+    void applyAdjustments(SceneSurface& out, const Surface& surface) const;
 
     void refreshScreens();
     QScreen* selectedScreen() const;
@@ -106,6 +117,9 @@ private:
     int m_selected = -1;
     bool m_guideVisible = true;
     bool m_alignmentMode = false;
+    bool m_peeking = false;  // guide hidden while the peek key is held
+    int m_peekHeldKey = 0;
+    QList<QKeySequence> m_peekKeys;
     QString m_projectPath;
     QString m_lastImageDir;
 
@@ -125,6 +139,14 @@ private:
     QCheckBox* m_tintCheck = nullptr;
     QToolButton* m_tintColorButton = nullptr;
     QSlider* m_previousSlider = nullptr;
+    QSlider* m_brightnessSlider = nullptr;
+    QCheckBox* m_invertCheck = nullptr;
+    QCheckBox* m_recolorCheck = nullptr;
+    QToolButton* m_lineColorButton = nullptr;
+    QCheckBox* m_gridCheck = nullptr;
+    QDoubleSpinBox* m_gridCellSpin = nullptr;
+    QSlider* m_gridStrengthSlider = nullptr;
+    QLabel* m_keyHint = nullptr;
 
     QLabel* m_sequenceFolderLabel = nullptr;
     QLabel* m_stepLabel = nullptr;
@@ -141,6 +163,9 @@ private:
     QDoubleSpinBox* m_canvasWidth = nullptr;
     QDoubleSpinBox* m_canvasHeight = nullptr;
     QComboBox* m_fitCombo = nullptr;
+    QComboBox* m_cornerCombo = nullptr;
+    QDoubleSpinBox* m_cornerX = nullptr;
+    QDoubleSpinBox* m_cornerY = nullptr;
     QSlider* m_opacitySlider = nullptr;
     QLabel* m_opacityLabel = nullptr;
     QCheckBox* m_visibleCheck = nullptr;

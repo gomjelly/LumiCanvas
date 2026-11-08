@@ -55,6 +55,15 @@ struct GuideSettings {
     QColor highlightColor{0, 255, 140};
     float previousOpacity = 0.35f; // Onion: strength of the previous step
 
+    // Applied to every image shown as a guide, whatever the mode.
+    float brightness = 1.0f;     // overall projector light on the canvas
+    bool invert = false;         // dark lines on white become light lines on black
+    bool recolor = false;        // draw the image in lineColor, keeping its brightness
+    QColor lineColor{255, 200, 60};
+    bool grid = false;           // classic drawing grid over the guide
+    double gridCellMm = 50.0;    // measured on the real canvas
+    float gridStrength = 0.4f;
+
     bool operator==(const GuideSettings&) const = default;
 };
 

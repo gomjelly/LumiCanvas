@@ -47,6 +47,7 @@ void WarpEditor::setSelectedSurface(int index)
     m_selected = index;
     m_selectedCorner = -1;
     update();
+    emit cornerSelectionChanged();
 }
 
 void WarpEditor::setCanvasSize(QSize size)
@@ -128,6 +129,16 @@ void WarpEditor::select(int surface, int corner)
     update();
     if (surfaceChanged)
         emit selectionChanged(surface);
+    emit cornerSelectionChanged();
+}
+
+void WarpEditor::setSelectedCorner(int corner)
+{
+    if (!m_project->isValidIndex(m_selected) || corner < -1 || corner > 3 || corner == m_selectedCorner)
+        return;
+    m_selectedCorner = corner;
+    update();
+    emit cornerSelectionChanged();
 }
 
 void WarpEditor::paintEvent(QPaintEvent*)
@@ -162,7 +173,7 @@ void WarpEditor::paintEvent(QPaintEvent*)
 
     p.setPen(QColor(130, 130, 136));
     p.drawText(QRectF(0, height() - kHintHeight - 6, width(), kHintHeight), Qt::AlignCenter,
-               tr("Drag corners or surfaces  ·  Arrows nudge 1 px (Shift ×10)  ·  Tab cycles corners  ·  Esc deselects corner"));
+               tr("Drag corners or surfaces  ·  Arrows move 1 px (Shift ×10)  ·  Tab picks a corner, also on the output  ·  Esc deselects"));
 }
 
 void WarpEditor::drawSurface(QPainter& p, int index, bool selected) const
@@ -225,12 +236,8 @@ bool WarpEditor::event(QEvent* event)
     if (event->type() == QEvent::KeyPress) {
         auto* key = static_cast<QKeyEvent*>(event);
         if ((key->key() == Qt::Key_Tab || key->key() == Qt::Key_Backtab)
-            && m_project->isValidIndex(m_selected)) {
-            const int step = key->key() == Qt::Key_Tab ? 1 : 3;
-            m_selectedCorner = m_selectedCorner < 0 ? 0 : (m_selectedCorner + step) % 4;
-            update();
+            && handleAlignmentKey(key->keyCombination()))
             return true;
-        }
     }
     return QWidget::event(event);
 }
@@ -294,27 +301,36 @@ void WarpEditor::mouseReleaseEvent(QMouseEvent* event)
 
 void WarpEditor::keyPressEvent(QKeyEvent* event)
 {
-    if (!m_project->isValidIndex(m_selected)) {
-        QWidget::keyPressEvent(event);
+    if (event->key() == Qt::Key_Escape && m_selectedCorner >= 0) {
+        setSelectedCorner(-1);
         return;
     }
+    if (!handleAlignmentKey(event->keyCombination()))
+        QWidget::keyPressEvent(event);
+}
+
+bool WarpEditor::handleAlignmentKey(QKeyCombination key)
+{
+    if (!m_project->isValidIndex(m_selected))
+        return false;
 
     QPointF direction;
-    switch (event->key()) {
+    switch (key.key()) {
+    case Qt::Key_Tab:
+        setSelectedCorner(m_selectedCorner < 0 ? 0 : (m_selectedCorner + 1) % 4);
+        return true;
+    case Qt::Key_Backtab:
+        setSelectedCorner(m_selectedCorner < 0 ? 0 : (m_selectedCorner + 3) % 4);
+        return true;
     case Qt::Key_Left: direction = QPointF(-1, 0); break;
     case Qt::Key_Right: direction = QPointF(1, 0); break;
     case Qt::Key_Up: direction = QPointF(0, -1); break;
     case Qt::Key_Down: direction = QPointF(0, 1); break;
-    case Qt::Key_Escape:
-        m_selectedCorner = -1;
-        update();
-        return;
     default:
-        QWidget::keyPressEvent(event);
-        return;
+        return false;
     }
 
-    const double pixels = (event->modifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
+    const double pixels = (key.keyboardModifiers() & Qt::ShiftModifier) ? 10.0 : 1.0;
     const QPointF delta(direction.x() * pixels / m_canvasSize.width(),
                         direction.y() * pixels / m_canvasSize.height());
     // Repeated nudges of the same corner (or surface) undo as one step.
@@ -328,6 +344,7 @@ void WarpEditor::keyPressEvent(QKeyEvent* event)
         m_project->translate(m_selected, delta);
     }
     m_history->end();
+    return true;
 }
 
 } // namespace lumi

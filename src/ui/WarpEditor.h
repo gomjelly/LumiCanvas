@@ -20,11 +20,18 @@ public:
     int selectedSurface() const { return m_selected; }
     // Does not emit selectionChanged.
     void setSelectedSurface(int index);
+    int selectedCorner() const { return m_selectedCorner; }
+    void setSelectedCorner(int corner);
     // Output resolution in pixels; sets the canvas aspect and the nudge step.
     void setCanvasSize(QSize size);
+    QSize canvasSize() const { return m_canvasSize; }
+    // Tab / Shift+Tab pick a corner and arrows nudge it. Also called for keys
+    // pressed on the projector output, so alignment works from the canvas.
+    bool handleAlignmentKey(QKeyCombination key);
 
 signals:
     void selectionChanged(int index);
+    void cornerSelectionChanged();
 
 protected:
     bool event(QEvent* event) override;

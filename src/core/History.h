@@ -25,6 +25,7 @@ public:
         MergeRename,
         MergeOpacity,
         MergeCanvasSize,
+        MergeCornerInput,
     };
 
     explicit History(Project* project, QObject* parent = nullptr);

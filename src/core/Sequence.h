@@ -47,10 +47,12 @@ signals:
     void currentChanged(int index);
     void displayImageChanged(); // the current or previous step image changed
     void loadFailed(int index);
+    void thumbnailReady(int index, const QImage& thumbnail);
 
 private:
     void updateCache();
     void startLoad(int index);
+    void loadThumbnailFrom(int index); // one at a time, so full images stay responsive
     void onImageLoaded(quint64 generation, int index, const QImage& image);
 
     QString m_folder;

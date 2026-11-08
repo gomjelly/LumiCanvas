@@ -2,6 +2,29 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ko_KR">
 <context>
+    <name>lumi::KeySettingsDialog</name>
+    <message>
+        <source>Key Settings</source>
+        <translation>키 설정</translation>
+    </message>
+    <message>
+        <source>Click a box and press a key on the keyboard, presentation remote or foot pedal.</source>
+        <translation>칸을 클릭한 뒤 키보드, 프레젠테이션 리모컨, 발 페달에서 키를 누르세요.</translation>
+    </message>
+    <message>
+        <source>Esc and Tab cannot be assigned. Arrow keys assigned here no longer move corners.</source>
+        <translation>Esc와 Tab은 지정할 수 없습니다. 여기에 지정한 화살표 키는 코너 이동에 쓰이지 않습니다.</translation>
+    </message>
+    <message>
+        <source>%1 is already used elsewhere in LumiCanvas.</source>
+        <translation>%1 키는 LumiCanvas의 다른 기능에서 이미 쓰고 있습니다.</translation>
+    </message>
+    <message>
+        <source>%1 is assigned to more than one operation.</source>
+        <translation>%1 키가 여러 기능에 지정되어 있습니다.</translation>
+    </message>
+</context>
+<context>
     <name>lumi::MainWindow</name>
     <message>
         <source>LumiCanvas Project (*.lumi)</source>
@@ -186,14 +209,6 @@
     <message>
         <source>Open Folder...</source>
         <translation>폴더 열기...</translation>
-    </message>
-    <message>
-        <source>Space / PageDown: next  ·  Backspace / PageUp: previous
-Home / End: first / last  ·  H: guide on/off  ·  T: alignment
-G: cycle guide display</source>
-        <translation>Space / PageDown: 다음  ·  Backspace / PageUp: 이전
-Home / End: 처음 / 마지막  ·  H: 가이드 켜기/끄기  ·  T: 정렬
-G: 가이드 표시 방식 전환</translation>
     </message>
     <message>
         <source>Guide Display</source>
@@ -457,6 +472,114 @@ G: 가이드 표시 방식 전환</translation>
             <numerusform>출력 %n개 열림  ·  출력 창에서 Esc를 누르면 닫힘</numerusform>
         </translation>
     </message>
+    <message>
+        <source>&amp;Key Settings...</source>
+        <translation>키 설정(&amp;K)...</translation>
+    </message>
+    <message>
+        <source>Overall projector light on the canvas</source>
+        <translation>캔버스에 비치는 프로젝터 빛의 전체 세기</translation>
+    </message>
+    <message>
+        <source>Brightness</source>
+        <translation>밝기</translation>
+    </message>
+    <message>
+        <source>Invert (dark lines become light)</source>
+        <translation>반전 (어두운 선을 밝게)</translation>
+    </message>
+    <message>
+        <source>Line colour</source>
+        <translation>선 색</translation>
+    </message>
+    <message>
+        <source>Choose the line colour</source>
+        <translation>선 색 선택</translation>
+    </message>
+    <message>
+        <source>Line Colour</source>
+        <translation>선 색</translation>
+    </message>
+    <message>
+        <source>Grid</source>
+        <translation>격자</translation>
+    </message>
+    <message>
+        <source>Grid cell size on the real canvas</source>
+        <translation>실제 캔버스 기준 격자 한 칸의 크기</translation>
+    </message>
+    <message>
+        <source>Grid strength</source>
+        <translation>격자 진하기</translation>
+    </message>
+    <message>
+        <source>Next step</source>
+        <translation>다음 단계</translation>
+    </message>
+    <message>
+        <source>First step</source>
+        <translation>처음 단계</translation>
+    </message>
+    <message>
+        <source>Last step</source>
+        <translation>마지막 단계</translation>
+    </message>
+    <message>
+        <source>Guide on/off</source>
+        <translation>가이드 켜기/끄기</translation>
+    </message>
+    <message>
+        <source>Hide guide while held</source>
+        <translation>누르는 동안 가이드 끄기</translation>
+    </message>
+    <message>
+        <source>Cycle guide display</source>
+        <translation>가이드 표시 방식 전환</translation>
+    </message>
+    <message>
+        <source>%1: next  ·  %2: previous
+%3 / %4: first / last  ·  %5: guide on/off
+%6: hide while held  ·  %7: alignment  ·  %8: guide display</source>
+        <translation>%1: 다음  ·  %2: 이전
+%3 / %4: 처음 / 마지막  ·  %5: 가이드 켜기/끄기
+%6: 누르는 동안 끄기  ·  %7: 정렬  ·  %8: 표시 방식</translation>
+    </message>
+    <message>
+        <source>Top left</source>
+        <translation>왼쪽 위</translation>
+    </message>
+    <message>
+        <source>Top right</source>
+        <translation>오른쪽 위</translation>
+    </message>
+    <message>
+        <source>Bottom right</source>
+        <translation>오른쪽 아래</translation>
+    </message>
+    <message>
+        <source>Bottom left</source>
+        <translation>왼쪽 아래</translation>
+    </message>
+    <message>
+        <source>Select a corner</source>
+        <translation>코너 선택</translation>
+    </message>
+    <message>
+        <source>Corner</source>
+        <translation>코너</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Alignment: Tab picks a corner, arrows move it (Shift ×10)</source>
+        <translation>정렬: Tab으로 코너 선택, 화살표로 이동 (Shift ×10)</translation>
+    </message>
+    <message>
+        <source>Move Corner</source>
+        <translation>코너 이동</translation>
+    </message>
 </context>
 <context>
     <name>lumi::OutputWindow</name>
@@ -487,10 +610,6 @@ G: 가이드 표시 방식 전환</translation>
 <context>
     <name>lumi::WarpEditor</name>
     <message>
-        <source>Drag corners or surfaces  ·  Arrows nudge 1 px (Shift ×10)  ·  Tab cycles corners  ·  Esc deselects corner</source>
-        <translation>코너나 서피스를 드래그  ·  화살표: 1px 이동 (Shift ×10)  ·  Tab: 코너 전환  ·  Esc: 코너 선택 해제</translation>
-    </message>
-    <message>
         <source>Move Corner</source>
         <translation>코너 이동</translation>
     </message>
@@ -505,6 +624,10 @@ G: 가이드 표시 방식 전환</translation>
     <message>
         <source>Nudge Surface</source>
         <translation>서피스 미세 이동</translation>
+    </message>
+    <message>
+        <source>Drag corners or surfaces  ·  Arrows move 1 px (Shift ×10)  ·  Tab picks a corner, also on the output  ·  Esc deselects</source>
+        <translation>코너나 서피스를 드래그  ·  화살표: 1px 이동 (Shift ×10)  ·  Tab: 코너 선택 (출력 창에서도)  ·  Esc: 선택 해제</translation>
     </message>
 </context>
 </TS>

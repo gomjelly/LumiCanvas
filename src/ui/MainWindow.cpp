@@ -4,6 +4,7 @@
 #include "render/OutputWindow.h"
 #include "ui/WarpEditor.h"
 
+#include <QAbstractSpinBox>
 #include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
@@ -20,6 +21,8 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QIcon>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -73,7 +76,10 @@ MainWindow::MainWindow(QWidget* parent)
     setAcceptDrops(true);
 
     createActions();
+    loadKeyBindings();
     createDocks();
+    updateKeyHint();
+    qApp->installEventFilter(this); // the peek key needs both press and release, in any window
 
     m_statusLabel = new QLabel;
     statusBar()->addPermanentWidget(m_statusLabel);
@@ -97,7 +103,15 @@ MainWindow::MainWindow(QWidget* parent)
         statusBar()->showMessage(tr("Could not load %1").arg(m_project.sequence().fileName(index)), 5000);
         updateSequencePanel();
     });
+    connect(sequence, &Sequence::thumbnailReady, this, [this](int index, const QImage& thumbnail) {
+        if (QListWidgetItem* item = m_stepList->item(index))
+            item->setIcon(QIcon(QPixmap::fromImage(thumbnail)));
+    });
     connect(m_editor, &WarpEditor::selectionChanged, this, &MainWindow::selectSurface);
+    connect(m_editor, &WarpEditor::cornerSelectionChanged, this, [this] {
+        updatePropertyPanel();
+        syncEngine(); // the output marks the corner being aligned
+    });
     connect(qApp, &QGuiApplication::screenAdded, this, &MainWindow::refreshScreens);
     connect(qApp, &QGuiApplication::screenRemoved, this, &MainWindow::refreshScreens);
 
@@ -110,7 +124,9 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow()
 {
+    qApp->removeEventFilter(this);
     // Child widgets outlive m_project; keep them from calling back during teardown.
+    m_editor->disconnect(this);
     m_surfaceList->blockSignals(true);
     m_stepList->blockSignals(true);
     m_project.sequence().disconnect(this);
@@ -209,6 +225,7 @@ void MainWindow::createActions()
 
     QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
     createLanguageMenu(viewMenu->addMenu(tr("&Language")));
+    addAction(viewMenu, tr("&Key Settings..."), {}, &MainWindow::openKeySettings);
 
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     QAction* aboutAction = helpMenu->addAction(tr("&About LumiCanvas"));
@@ -315,6 +332,7 @@ QWidget* MainWindow::createSequencePanel()
     layout->addLayout(navRow);
 
     m_stepList = new QListWidget;
+    m_stepList->setIconSize(QSize(48, 48));
     connect(m_stepList, &QListWidget::currentRowChanged, this,
             [this](int row) { m_project.sequence().setCurrentIndex(row); });
     layout->addWidget(m_stepList, 1);
@@ -326,12 +344,10 @@ QWidget* MainWindow::createSequencePanel()
 
     layout->addWidget(createGuidePanel());
 
-    auto* hint = new QLabel(tr("Space / PageDown: next  ·  Backspace / PageUp: previous\n"
-                               "Home / End: first / last  ·  H: guide on/off  ·  T: alignment\n"
-                               "G: cycle guide display"));
-    hint->setWordWrap(true);
-    hint->setForegroundRole(QPalette::PlaceholderText);
-    layout->addWidget(hint);
+    m_keyHint = new QLabel;
+    m_keyHint->setWordWrap(true);
+    m_keyHint->setForegroundRole(QPalette::PlaceholderText);
+    layout->addWidget(m_keyHint);
     return panel;
 }
 
@@ -373,7 +389,9 @@ QWidget* MainWindow::createGuidePanel()
     });
     m_tintColorButton = new QToolButton;
     m_tintColorButton->setToolTip(tr("Choose the highlight colour"));
-    connect(m_tintColorButton, &QToolButton::clicked, this, &MainWindow::chooseHighlightColor);
+    connect(m_tintColorButton, &QToolButton::clicked, this, [this] {
+        chooseGuideColor(&GuideSettings::highlightColor, &GuideSettings::tintChanges, tr("Highlight Colour"));
+    });
     auto* tintRow = new QHBoxLayout;
     tintRow->addWidget(m_tintCheck, 1);
     tintRow->addWidget(m_tintColorButton);
@@ -386,6 +404,58 @@ QWidget* MainWindow::createGuidePanel()
     });
     m_guideForm->addRow(tr("Previous step"), m_previousSlider);
 
+    m_brightnessSlider = makePercentSlider();
+    m_brightnessSlider->setMinimum(5);
+    m_brightnessSlider->setToolTip(tr("Overall projector light on the canvas"));
+    connect(m_brightnessSlider, &QSlider::valueChanged, this, [updateGuide](int value) {
+        updateGuide([value](GuideSettings& g) { g.brightness = value / 100.0f; });
+    });
+    m_guideForm->addRow(tr("Brightness"), m_brightnessSlider);
+
+    m_invertCheck = new QCheckBox(tr("Invert (dark lines become light)"));
+    connect(m_invertCheck, &QCheckBox::toggled, this, [updateGuide](bool on) {
+        updateGuide([on](GuideSettings& g) { g.invert = on; });
+    });
+    m_guideForm->addRow(QString(), m_invertCheck);
+
+    m_recolorCheck = new QCheckBox(tr("Line colour"));
+    connect(m_recolorCheck, &QCheckBox::toggled, this, [updateGuide](bool on) {
+        updateGuide([on](GuideSettings& g) { g.recolor = on; });
+    });
+    m_lineColorButton = new QToolButton;
+    m_lineColorButton->setToolTip(tr("Choose the line colour"));
+    connect(m_lineColorButton, &QToolButton::clicked, this, [this] {
+        chooseGuideColor(&GuideSettings::lineColor, &GuideSettings::recolor, tr("Line Colour"));
+    });
+    auto* lineRow = new QHBoxLayout;
+    lineRow->addWidget(m_recolorCheck, 1);
+    lineRow->addWidget(m_lineColorButton);
+    m_guideForm->addRow(QString(), lineRow);
+
+    m_gridCheck = new QCheckBox(tr("Grid"));
+    connect(m_gridCheck, &QCheckBox::toggled, this, [updateGuide](bool on) {
+        updateGuide([on](GuideSettings& g) { g.grid = on; });
+    });
+    m_gridCellSpin = new QDoubleSpinBox;
+    m_gridCellSpin->setRange(1.0, 10000.0);
+    m_gridCellSpin->setDecimals(0);
+    m_gridCellSpin->setSuffix(tr(" mm"));
+    m_gridCellSpin->setKeyboardTracking(false);
+    m_gridCellSpin->setToolTip(tr("Grid cell size on the real canvas"));
+    connect(m_gridCellSpin, &QDoubleSpinBox::valueChanged, this, [updateGuide](double value) {
+        updateGuide([value](GuideSettings& g) { g.gridCellMm = value; });
+    });
+    auto* gridRow = new QHBoxLayout;
+    gridRow->addWidget(m_gridCheck, 1);
+    gridRow->addWidget(m_gridCellSpin);
+    m_guideForm->addRow(QString(), gridRow);
+
+    m_gridStrengthSlider = makePercentSlider();
+    connect(m_gridStrengthSlider, &QSlider::valueChanged, this, [updateGuide](int value) {
+        updateGuide([value](GuideSettings& g) { g.gridStrength = value / 100.0f; });
+    });
+    m_guideForm->addRow(tr("Grid strength"), m_gridStrengthSlider);
+
     return box;
 }
 
@@ -396,15 +466,33 @@ void MainWindow::updateGuidePanel()
     const QSignalBlocker b2(m_dimSlider);
     const QSignalBlocker b3(m_tintCheck);
     const QSignalBlocker b4(m_previousSlider);
+    const QSignalBlocker b5(m_brightnessSlider);
+    const QSignalBlocker b6(m_invertCheck);
+    const QSignalBlocker b7(m_recolorCheck);
+    const QSignalBlocker b8(m_gridCheck);
+    const QSignalBlocker b9(m_gridCellSpin);
+    const QSignalBlocker b10(m_gridStrengthSlider);
 
     m_guideModeCombo->setCurrentIndex(int(g.mode));
     m_dimSlider->setValue(qRound(g.dimUnchanged * 100));
     m_tintCheck->setChecked(g.tintChanges);
     m_previousSlider->setValue(qRound(g.previousOpacity * 100));
+    m_brightnessSlider->setValue(qRound(g.brightness * 100));
+    m_invertCheck->setChecked(g.invert);
+    m_recolorCheck->setChecked(g.recolor);
+    m_gridCheck->setChecked(g.grid);
+    m_gridCellSpin->setValue(g.gridCellMm);
+    m_gridCellSpin->setEnabled(g.grid);
+    m_gridStrengthSlider->setValue(qRound(g.gridStrength * 100));
 
-    QPixmap swatch(16, 16);
-    swatch.fill(g.highlightColor);
-    m_tintColorButton->setIcon(QIcon(swatch));
+    auto setSwatch = [](QToolButton* button, const QColor& color) {
+        QPixmap swatch(16, 16);
+        swatch.fill(color);
+        button->setIcon(QIcon(swatch));
+    };
+    setSwatch(m_tintColorButton, g.highlightColor);
+    setSwatch(m_lineColorButton, g.lineColor);
+    m_guideForm->setRowVisible(m_gridStrengthSlider, g.grid);
 
     const bool highlight = g.mode == GuideMode::Highlight;
     m_guideForm->setRowVisible(m_dimSlider, highlight);
@@ -420,15 +508,131 @@ void MainWindow::cycleGuideMode()
     statusBar()->showMessage(tr("Guide display: %1").arg(m_guideModeCombo->itemText(int(guide.mode))), 2000);
 }
 
-void MainWindow::chooseHighlightColor()
+void MainWindow::chooseGuideColor(QColor GuideSettings::*color, bool GuideSettings::*enable, const QString& title)
 {
     GuideSettings guide = m_project.guide();
-    const QColor color = QColorDialog::getColor(guide.highlightColor, this, tr("Highlight Colour"));
-    if (!color.isValid())
+    const QColor chosen = QColorDialog::getColor(guide.*color, this, title);
+    if (!chosen.isValid())
         return;
-    guide.highlightColor = color;
-    guide.tintChanges = true; // picking a colour implies wanting it
+    guide.*color = chosen;
+    guide.*enable = true; // picking a colour implies wanting it
     m_project.setGuide(guide);
+}
+
+void MainWindow::setPeeking(bool peeking)
+{
+    if (peeking == m_peeking)
+        return;
+    m_peeking = peeking;
+    syncEngine();
+    updateSequencePanel();
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::KeyPress) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        const QKeySequence pressed(QKeyCombination(key->modifiers() & ~Qt::KeypadModifier, Qt::Key(key->key())));
+        const QWidget* focus = QApplication::focusWidget();
+        const bool typing = qobject_cast<const QLineEdit*>(focus) || qobject_cast<const QAbstractSpinBox*>(focus);
+        if (!key->isAutoRepeat() && !typing && !QApplication::activeModalWidget() && m_peekKeys.contains(pressed)) {
+            m_peekHeldKey = key->key();
+            setPeeking(true);
+        }
+    } else if (event->type() == QEvent::KeyRelease) {
+        const auto* key = static_cast<QKeyEvent*>(event);
+        if (m_peeking && !key->isAutoRepeat() && key->key() == m_peekHeldKey)
+            setPeeking(false);
+    } else if (event->type() == QEvent::ApplicationStateChange
+               && QGuiApplication::applicationState() != Qt::ApplicationActive) {
+        setPeeking(false); // the release would never arrive
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+QList<KeyBinding> MainWindow::keyBindings() const
+{
+    const auto key = [](auto... keys) { return QList<QKeySequence>{QKeySequence(keys)...}; };
+    return {
+        {QStringLiteral("next"), tr("Next step"), key(Qt::Key_Space, Qt::Key_PageDown), m_nextAction->shortcuts()},
+        {QStringLiteral("previous"), tr("Previous step"), key(Qt::Key_Backspace, Qt::Key_PageUp), m_previousAction->shortcuts()},
+        {QStringLiteral("first"), tr("First step"), key(Qt::Key_Home), m_firstAction->shortcuts()},
+        {QStringLiteral("last"), tr("Last step"), key(Qt::Key_End), m_lastAction->shortcuts()},
+        {QStringLiteral("guide"), tr("Guide on/off"), key(Qt::Key_H), m_guideAction->shortcuts()},
+        {QStringLiteral("peek"), tr("Hide guide while held"), key(Qt::Key_B), m_peekKeys},
+        {QStringLiteral("align"), tr("Alignment pattern"), key(Qt::Key_T), m_alignAction->shortcuts()},
+        {QStringLiteral("mode"), tr("Cycle guide display"), key(Qt::Key_G), m_guideModeAction->shortcuts()},
+    };
+}
+
+void MainWindow::applyKeyBindings(const QList<KeyBinding>& bindings)
+{
+    const QHash<QString, QAction*> actions{
+        {QStringLiteral("next"), m_nextAction},   {QStringLiteral("previous"), m_previousAction},
+        {QStringLiteral("first"), m_firstAction}, {QStringLiteral("last"), m_lastAction},
+        {QStringLiteral("guide"), m_guideAction}, {QStringLiteral("align"), m_alignAction},
+        {QStringLiteral("mode"), m_guideModeAction},
+    };
+    for (const KeyBinding& binding : bindings) {
+        if (QAction* action = actions.value(binding.id))
+            action->setShortcuts(binding.keys);
+        else
+            m_peekKeys = binding.keys;
+    }
+}
+
+void MainWindow::loadKeyBindings()
+{
+    QSettings settings;
+    QList<KeyBinding> bindings = keyBindings();
+    for (KeyBinding& binding : bindings) {
+        const QString name = QStringLiteral("keys/") + binding.id;
+        binding.keys = settings.contains(name)
+                           ? QKeySequence::listFromString(settings.value(name).toString(), QKeySequence::PortableText)
+                           : binding.defaults;
+    }
+    applyKeyBindings(bindings);
+}
+
+void MainWindow::openKeySettings()
+{
+    QList<QKeySequence> reserved{QKeySequence(Qt::Key_Escape), QKeySequence(Qt::Key_Tab),
+                                 QKeySequence(Qt::Key_Backtab), QKeySequence(Qt::SHIFT | Qt::Key_Backtab)};
+    for (const QAction* action : findChildren<QAction*>()) {
+        if (!m_showActions.contains(action))
+            reserved += action->shortcuts();
+    }
+
+    KeySettingsDialog dialog(keyBindings(), reserved, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    QSettings settings;
+    const QList<KeyBinding> bindings = dialog.bindings();
+    for (const KeyBinding& binding : bindings) {
+        settings.setValue(QStringLiteral("keys/") + binding.id,
+                          QKeySequence::listToString(binding.keys, QKeySequence::PortableText));
+    }
+    applyKeyBindings(bindings);
+    updateKeyHint();
+}
+
+void MainWindow::updateKeyHint()
+{
+    QHash<QString, QString> names;
+    const QList<KeyBinding> bindings = keyBindings();
+    for (const KeyBinding& binding : bindings) {
+        QStringList keys;
+        for (const QKeySequence& key : binding.keys)
+            keys << key.toString(QKeySequence::NativeText);
+        names[binding.id] = keys.isEmpty() ? QStringLiteral("-") : keys.join(QStringLiteral(" / "));
+    }
+    m_keyHint->setText(tr("%1: next  ·  %2: previous\n"
+                          "%3 / %4: first / last  ·  %5: guide on/off\n"
+                          "%6: hide while held  ·  %7: alignment  ·  %8: guide display")
+                           .arg(names[QStringLiteral("next")], names[QStringLiteral("previous")],
+                                names[QStringLiteral("first")], names[QStringLiteral("last")],
+                                names[QStringLiteral("guide")], names[QStringLiteral("peek")],
+                                names[QStringLiteral("align")], names[QStringLiteral("mode")]));
 }
 
 QWidget* MainWindow::createSurfacesPanel()
@@ -501,6 +705,30 @@ QWidget* MainWindow::createSurfacesPanel()
                 recordEdit(tr("Change Placement"), [&] { m_project.setFitMode(m_selected, FitMode(index)); });
             });
     form->addRow(tr("Placement"), m_fitCombo);
+
+    // Combo order matches the corner order: TL, TR, BR, BL.
+    m_cornerCombo = new QComboBox;
+    m_cornerCombo->addItems({tr("Top left"), tr("Top right"), tr("Bottom right"), tr("Bottom left")});
+    m_cornerCombo->setPlaceholderText(tr("Select a corner"));
+    connect(m_cornerCombo, &QComboBox::activated, m_editor, &WarpEditor::setSelectedCorner);
+    form->addRow(tr("Corner"), m_cornerCombo);
+
+    auto makeCornerSpin = [this](Qt::Orientation axis) {
+        auto* spin = new QDoubleSpinBox;
+        spin->setRange(-100000.0, 100000.0);
+        spin->setDecimals(1);
+        spin->setSuffix(tr(" px"));
+        spin->setKeyboardTracking(false);
+        connect(spin, &QDoubleSpinBox::valueChanged, this,
+                [this, axis](double value) { onCornerEdited(axis, value); });
+        return spin;
+    };
+    m_cornerX = makeCornerSpin(Qt::Horizontal);
+    m_cornerY = makeCornerSpin(Qt::Vertical);
+    auto* cornerRow = new QHBoxLayout;
+    cornerRow->addWidget(m_cornerX, 1);
+    cornerRow->addWidget(m_cornerY, 1);
+    form->addRow(QString(), cornerRow);
 
     m_opacitySlider = new QSlider(Qt::Horizontal);
     m_opacitySlider->setRange(0, 100);
@@ -750,11 +978,6 @@ void MainWindow::updateSequencePanel()
     const int current = sequence.currentIndex();
     const bool empty = sequence.isEmpty();
 
-    m_previousAction->setEnabled(!empty && current > 0);
-    m_firstAction->setEnabled(!empty && current > 0);
-    m_nextAction->setEnabled(!empty && current < sequence.count() - 1);
-    m_lastAction->setEnabled(!empty && current < sequence.count() - 1);
-
     QString status;
     if (empty) {
         m_sequenceFolderLabel->setText(tr("No folder loaded. Drop a folder of step images here."));
@@ -776,7 +999,7 @@ void MainWindow::updateSequencePanel()
 
     if (m_alignmentMode)
         status += (status.isEmpty() ? QString() : QStringLiteral("  ·  ")) + tr("Alignment pattern");
-    else if (!m_guideVisible)
+    else if (!m_guideVisible || m_peeking)
         status += (status.isEmpty() ? QString() : QStringLiteral("  ·  ")) + tr("Guide hidden");
     m_statusLabel->setText(status);
 }
@@ -798,6 +1021,12 @@ void MainWindow::setAlignmentMode(bool on)
     {
         const QSignalBlocker blocker(m_alignAction);
         m_alignAction->setChecked(on);
+    }
+    if (on) {
+        // Start on a corner right away: Tab and arrows then work from the editor or the output.
+        if (m_editor->selectedCorner() < 0)
+            m_editor->setSelectedCorner(0);
+        statusBar()->showMessage(tr("Alignment: Tab picks a corner, arrows move it (Shift ×10)"), 5000);
     }
     syncEngine();
     updateSequencePanel();
@@ -872,6 +1101,23 @@ void MainWindow::onCanvasSizeEdited()
                History::MergeCanvasSize);
 }
 
+void MainWindow::onCornerEdited(Qt::Orientation axis, double pixels)
+{
+    const int corner = m_editor->selectedCorner();
+    if (!m_project.isValidIndex(m_selected) || corner < 0)
+        return;
+    // Only the edited axis changes, so rounding in the other box can't creep in.
+    QPointF position = m_project.surface(m_selected).corners[corner];
+    const QSize canvas = m_editor->canvasSize();
+    if (axis == Qt::Horizontal)
+        position.setX(pixels / canvas.width());
+    else
+        position.setY(pixels / canvas.height());
+    m_history.begin(tr("Move Corner"), History::MergeCornerInput, m_selected * 5 + corner);
+    m_project.setCorner(m_selected, corner, position);
+    m_history.end();
+}
+
 void MainWindow::onStructureChanged()
 {
     {
@@ -909,6 +1155,9 @@ void MainWindow::updatePropertyPanel()
     const QSignalBlocker b5(m_canvasWidth);
     const QSignalBlocker b6(m_canvasHeight);
     const QSignalBlocker b7(m_fitCombo);
+    const QSignalBlocker b8(m_cornerCombo);
+    const QSignalBlocker b9(m_cornerX);
+    const QSignalBlocker b10(m_cornerY);
 
     if (!valid) {
         m_nameEdit->clear();
@@ -933,6 +1182,17 @@ void MainWindow::updatePropertyPanel()
     m_canvasWidth->setValue(s.canvasSizeMm.width());
     m_canvasHeight->setValue(s.canvasSizeMm.height());
     m_fitCombo->setCurrentIndex(int(s.fit));
+
+    const int corner = m_editor->selectedCorner();
+    m_cornerCombo->setCurrentIndex(corner);
+    m_cornerX->setEnabled(corner >= 0);
+    m_cornerY->setEnabled(corner >= 0);
+    if (corner >= 0) {
+        const QSize canvas = m_editor->canvasSize();
+        m_cornerX->setValue(s.corners[corner].x() * canvas.width());
+        m_cornerY->setValue(s.corners[corner].y() * canvas.height());
+    }
+
     m_opacitySlider->setValue(qRound(s.opacity * 100));
     m_opacityLabel->setText(QStringLiteral("%1%").arg(qRound(s.opacity * 100)));
     m_visibleCheck->setChecked(s.visible);
@@ -958,10 +1218,24 @@ void MainWindow::applyGuide(SceneSurface& out, const Surface& surface) const
     out.highlightColor = {g.highlightColor.redF(), g.highlightColor.greenF(), g.highlightColor.blueF(), 1.0f};
 }
 
+void MainWindow::applyAdjustments(SceneSurface& out, const Surface& surface) const
+{
+    const GuideSettings& g = m_project.guide();
+    out.invert = g.invert;
+    out.recolor = g.recolor;
+    out.lineColor = {g.lineColor.redF(), g.lineColor.greenF(), g.lineColor.blueF(), 1.0f};
+    out.brightness = g.brightness;
+    if (g.grid) {
+        out.gridColumns = float(surface.canvasSizeMm.width() / g.gridCellMm);
+        out.gridRows = float(surface.canvasSizeMm.height() / g.gridCellMm);
+        out.gridStrength = g.gridStrength;
+    }
+}
+
 void MainWindow::syncEngine()
 {
     auto scene = std::make_shared<Scene>();
-    if (m_guideVisible || m_alignmentMode) {
+    if ((m_guideVisible && !m_peeking) || m_alignmentMode) {
         for (int i = 0; i < m_project.count(); ++i) {
             const Surface& s = m_project.surface(i);
             if (!s.visible)
@@ -984,9 +1258,12 @@ void MainWindow::syncEngine()
                 if (!image.isNull()) {
                     out.image = image;
                     out.contentRect = contentRect(s.fit, s.canvasSizeMm, image.size());
+                    applyAdjustments(out, s);
                 }
                 if (s.content == ContentType::Sequence)
                     applyGuide(out, s);
+            } else if (i == m_selected) {
+                out.activeCorner = m_editor->selectedCorner();
             }
             scene->surfaces.push_back(std::move(out));
         }
@@ -1041,6 +1318,7 @@ void MainWindow::onScreenSelected()
     if (!screen)
         return;
     m_editor->setCanvasSize(physicalSize(screen));
+    updatePropertyPanel(); // corner positions are shown in output pixels
     // Fullscreen on the primary display would cover the editor.
     m_windowedCheck->setChecked(screen == QGuiApplication::primaryScreen());
 }
@@ -1097,6 +1375,9 @@ void MainWindow::handleOutputKey(QKeyCombination key)
             return;
         }
     }
+    // Arrows only move corners while aligning, so a stray key can't shift a drawing in progress.
+    if (m_alignmentMode)
+        m_editor->handleAlignmentKey(key);
 }
 
 } // namespace lumi

@@ -83,6 +83,13 @@ QJsonObject guideToJson(const GuideSettings& g)
         {"tintChanges", g.tintChanges},
         {"highlightColor", g.highlightColor.name()},
         {"previousOpacity", percent(g.previousOpacity)},
+        {"brightness", percent(g.brightness)},
+        {"invert", g.invert},
+        {"recolor", g.recolor},
+        {"lineColor", g.lineColor.name()},
+        {"grid", g.grid},
+        {"gridCellMm", g.gridCellMm},
+        {"gridStrength", percent(g.gridStrength)},
     };
 }
 
@@ -98,6 +105,15 @@ GuideSettings guideFromJson(const QJsonObject& o)
     if (color.isValid())
         g.highlightColor = color;
     g.previousOpacity = std::clamp(float(o.value("previousOpacity").toDouble(g.previousOpacity)), 0.0f, 1.0f);
+    g.brightness = std::clamp(float(o.value("brightness").toDouble(g.brightness)), 0.05f, 1.0f);
+    g.invert = o.value("invert").toBool(g.invert);
+    g.recolor = o.value("recolor").toBool(g.recolor);
+    const QColor lineColor = QColor::fromString(o.value("lineColor").toString());
+    if (lineColor.isValid())
+        g.lineColor = lineColor;
+    g.grid = o.value("grid").toBool(g.grid);
+    g.gridCellMm = std::max(1.0, o.value("gridCellMm").toDouble(g.gridCellMm));
+    g.gridStrength = std::clamp(float(o.value("gridStrength").toDouble(g.gridStrength)), 0.0f, 1.0f);
     return g;
 }
 

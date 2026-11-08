@@ -29,6 +29,9 @@ struct SurfaceConstants {
     float params[4]; // x: opacity, y: 1 = texture, 0 = test pattern
     float guide[4];  // x: mode, y: dim unchanged, z: previous opacity, w: tint amount
     float highlightColor[4];
+    float adjust[4]; // x: invert, y: recolour, z: brightness, w: grid strength
+    float lineColor[4];
+    float gridCells[4]; // xy: columns, rows; z: active corner or -1
 };
 static_assert(sizeof(SurfaceConstants) % 16 == 0);
 
@@ -424,6 +427,14 @@ bool RenderEngine::renderOutput(Output& out, const Scene& scene, bool vsync)
         c.guide[2] = s.previousOpacity;
         c.guide[3] = s.tintAmount;
         std::copy(s.highlightColor.begin(), s.highlightColor.end(), c.highlightColor);
+        c.adjust[0] = s.invert ? 1.0f : 0.0f;
+        c.adjust[1] = s.recolor ? 1.0f : 0.0f;
+        c.adjust[2] = s.brightness;
+        c.adjust[3] = s.gridStrength;
+        std::copy(s.lineColor.begin(), s.lineColor.end(), c.lineColor);
+        c.gridCells[0] = s.gridColumns;
+        c.gridCells[1] = s.gridRows;
+        c.gridCells[2] = float(s.activeCorner);
 
         D3D11_MAPPED_SUBRESOURCE mapped{};
         if (FAILED(m_context->Map(m_constants.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
