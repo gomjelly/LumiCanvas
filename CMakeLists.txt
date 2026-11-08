@@ -22,12 +22,16 @@ qt_add_executable(LumiCanvas WIN32
     src/core/Project.cpp
     src/core/Sequence.h
     src/core/Sequence.cpp
+    src/core/StepGenerator.h
+    src/core/StepGenerator.cpp
     src/render/RenderEngine.h
     src/render/RenderEngine.cpp
     src/render/OutputWindow.h
     src/render/OutputWindow.cpp
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp
+    src/ui/GenerateStepsDialog.h
+    src/ui/GenerateStepsDialog.cpp
     src/ui/KeySettingsDialog.h
     src/ui/KeySettingsDialog.cpp
     src/ui/WarpEditor.h
@@ -60,6 +64,23 @@ if(MSVC)
 endif()
 
 target_link_libraries(LumiCanvas PRIVATE Qt6::Widgets Qt6::Concurrent d3d11 dxgi d3dcompiler)
+
+# Tests: cmake --build --preset debug --target test_stepgenerator, then ctest --test-dir build -C Debug
+enable_testing()
+find_package(Qt6 REQUIRED COMPONENTS Test)
+qt_add_executable(test_stepgenerator
+    tests/test_stepgenerator.cpp
+    src/core/StepGenerator.cpp
+)
+set_target_properties(test_stepgenerator PROPERTIES WIN32_EXECUTABLE FALSE)
+target_include_directories(test_stepgenerator PRIVATE src)
+target_compile_definitions(test_stepgenerator PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_options(test_stepgenerator PRIVATE /utf-8)
+target_link_libraries(test_stepgenerator PRIVATE Qt6::Gui Qt6::Test)
+add_test(NAME stepgenerator COMMAND test_stepgenerator)
+set_tests_properties(stepgenerator PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
 
 # Copy the Qt runtime next to the executable so it runs straight from the build tree.
 option(LUMI_DEPLOY_QT "Run windeployqt after each build" ON)

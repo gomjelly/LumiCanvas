@@ -2,6 +2,103 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ko_KR">
 <context>
+    <name>lumi::GenerateStepsDialog</name>
+    <message>
+        <source>Generate Steps from Image</source>
+        <translation>이미지에서 단계 생성</translation>
+    </message>
+    <message>
+        <source>Colour regions</source>
+        <translation>색 영역</translation>
+    </message>
+    <message>
+        <source>Light and dark (grey)</source>
+        <translation>명암 (회색)</translation>
+    </message>
+    <message>
+        <source>Split by</source>
+        <translation>나누는 기준</translation>
+    </message>
+    <message>
+        <source>Regions</source>
+        <translation>영역 수</translation>
+    </message>
+    <message>
+        <source>Dark to light</source>
+        <translation>어두운 곳부터</translation>
+    </message>
+    <message>
+        <source>Light to dark</source>
+        <translation>밝은 곳부터</translation>
+    </message>
+    <message>
+        <source>Painting order</source>
+        <translation>칠하는 순서</translation>
+    </message>
+    <message>
+        <source>Start with an outline</source>
+        <translation>외곽선으로 시작</translation>
+    </message>
+    <message>
+        <source>Left: main shapes only. Right: fine detail.</source>
+        <translation>왼쪽: 큰 형태만, 오른쪽: 세부까지</translation>
+    </message>
+    <message>
+        <source>Line detail</source>
+        <translation>선 세밀도</translation>
+    </message>
+    <message>
+        <source>End with the original image</source>
+        <translation>마지막에 원본 이미지 표시</translation>
+    </message>
+    <message>
+        <source>Choose...</source>
+        <translation>선택...</translation>
+    </message>
+    <message>
+        <source>Save to</source>
+        <translation>저장 위치</translation>
+    </message>
+    <message>
+        <source>Generate</source>
+        <translation>생성</translation>
+    </message>
+    <message>
+        <source>Choose a folder to save the steps in.</source>
+        <translation>단계 이미지를 저장할 폴더를 선택하세요.</translation>
+    </message>
+    <message>
+        <source>%1 is not empty. Choose a new or empty folder.</source>
+        <translation>%1 폴더가 비어 있지 않습니다. 새 폴더나 빈 폴더를 선택하세요.</translation>
+    </message>
+    <message>
+        <source>Updating preview...</source>
+        <translation>미리보기 갱신 중...</translation>
+    </message>
+    <message>
+        <source>Outline</source>
+        <translation>외곽선</translation>
+    </message>
+    <message>
+        <source>Original</source>
+        <translation>원본</translation>
+    </message>
+    <message>
+        <source>Region %1</source>
+        <translation>영역 %1</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n step(s) will be created.</source>
+        <translation>
+            <numerusform>%n개 단계가 만들어집니다.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Save Steps To</source>
+        <translation>단계 저장 위치</translation>
+    </message>
+</context>
+<context>
     <name>lumi::KeySettingsDialog</name>
     <message>
         <source>Key Settings</source>
@@ -580,6 +677,38 @@
         <source>Move Corner</source>
         <translation>코너 이동</translation>
     </message>
+    <message>
+        <source>&amp;Generate Steps from Image...</source>
+        <translation>이미지에서 단계 생성(&amp;G)...</translation>
+    </message>
+    <message>
+        <source>From Image...</source>
+        <translation>이미지에서 생성...</translation>
+    </message>
+    <message>
+        <source>Generate steps from one finished image</source>
+        <translation>완성 이미지 한 장으로 단계를 만듭니다</translation>
+    </message>
+    <message>
+        <source>Choose a Finished Image</source>
+        <translation>완성 이미지 선택</translation>
+    </message>
+    <message>
+        <source>Generating steps...</source>
+        <translation>단계 생성 중...</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
+        <source>Generate Steps from Image</source>
+        <translation>이미지에서 단계 생성</translation>
+    </message>
+    <message>
+        <source>Step generation cancelled</source>
+        <translation>단계 생성을 취소했습니다</translation>
+    </message>
 </context>
 <context>
     <name>lumi::OutputWindow</name>
@@ -605,6 +734,17 @@
     <message>
         <source>This project was saved by a newer version of LumiCanvas.</source>
         <translation>더 새로운 버전의 LumiCanvas로 저장된 프로젝트입니다.</translation>
+    </message>
+</context>
+<context>
+    <name>lumi::StepGenerator</name>
+    <message>
+        <source>Could not create %1</source>
+        <translation>%1을(를) 만들 수 없습니다</translation>
+    </message>
+    <message>
+        <source>Could not write %1</source>
+        <translation>%1을(를) 저장할 수 없습니다</translation>
     </message>
 </context>
 <context>

@@ -1,3 +1,5 @@
+#include "core/ImageLoader.h"
+#include "core/StepGenerator.h"
 #include "ui/MainWindow.h"
 
 #include <QApplication>
@@ -52,10 +54,22 @@ int main(int argc, char* argv[])
     const QCommandLineOption windowedOutput(QStringLiteral("windowed-output"),
                                             QStringLiteral("Open a windowed output on startup."));
     parser.addOption(windowedOutput);
+    const QCommandLineOption generateOption(QStringLiteral("generate-steps"),
+                                            QStringLiteral("Split the image at <path> into steps and exit, without opening a window."),
+                                            QStringLiteral("output folder"));
+    parser.addOption(generateOption);
     parser.addPositionalArgument(QStringLiteral("path"),
                                  QStringLiteral("A .lumi project or a folder of step images."),
                                  QStringLiteral("[path]"));
     parser.process(app);
+
+    if (parser.isSet(generateOption)) {
+        const QStringList paths = parser.positionalArguments();
+        const QImage source = paths.isEmpty() ? QImage() : lumi::loadImage(paths.constFirst());
+        if (source.isNull())
+            return 2;
+        return lumi::saveSteps(source, lumi::StepOptions(), parser.value(generateOption), {}).isEmpty() ? 0 : 3;
+    }
 
     lumi::MainWindow window;
     if (!window.initialize())

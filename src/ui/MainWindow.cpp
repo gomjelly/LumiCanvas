@@ -2,6 +2,7 @@
 
 #include "core/ImageLoader.h"
 #include "render/OutputWindow.h"
+#include "ui/GenerateStepsDialog.h"
 #include "ui/WarpEditor.h"
 
 #include <QAbstractSpinBox>
@@ -19,6 +20,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QFutureWatcher>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -30,6 +32,8 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPixmap>
+#include <QProgressDialog>
+#include <QPromise>
 #include <QPushButton>
 #include <QScreen>
 #include <QSettings>
@@ -40,6 +44,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace lumi {
 
@@ -177,6 +182,8 @@ void MainWindow::createActions()
     QAction* openFolderAction = addAction(sequenceMenu, tr("&Open Folder..."),
                                           {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O)},
                                           &MainWindow::openSequenceFolder);
+    addAction(sequenceMenu, tr("&Generate Steps from Image..."), {QKeySequence(Qt::CTRL | Qt::Key_G)},
+              &MainWindow::generateStepsFromImage);
     sequenceMenu->addSeparator();
     Sequence* sequence = &m_project.sequence();
     m_nextAction = addAction(sequenceMenu, tr("&Next Step"),
@@ -304,7 +311,13 @@ QWidget* MainWindow::createSequencePanel()
 
     auto* openButton = new QPushButton(tr("Open Folder..."));
     connect(openButton, &QPushButton::clicked, this, &MainWindow::openSequenceFolder);
-    layout->addWidget(openButton);
+    auto* generateButton = new QPushButton(tr("From Image..."));
+    generateButton->setToolTip(tr("Generate steps from one finished image"));
+    connect(generateButton, &QPushButton::clicked, this, &MainWindow::generateStepsFromImage);
+    auto* sourceRow = new QHBoxLayout;
+    sourceRow->addWidget(openButton);
+    sourceRow->addWidget(generateButton);
+    layout->addLayout(sourceRow);
 
     m_sequenceFolderLabel = new QLabel;
     m_sequenceFolderLabel->setWordWrap(true);
@@ -934,6 +947,56 @@ void MainWindow::openSequenceFolder()
     const QString folder = QFileDialog::getExistingDirectory(this, tr("Open Image Sequence Folder"), start);
     if (!folder.isEmpty())
         loadSequence(folder);
+}
+
+void MainWindow::generateStepsFromImage()
+{
+    const QString path = QFileDialog::getOpenFileName(this, tr("Choose a Finished Image"), m_lastImageDir, imageFilter());
+    if (path.isEmpty())
+        return;
+    m_lastImageDir = QFileInfo(path).absolutePath();
+    const QImage source = loadImage(path);
+    if (source.isNull()) {
+        QMessageBox::warning(this, tr("Choose Image"), tr("Could not load %1").arg(QDir::toNativeSeparators(path)));
+        return;
+    }
+    GenerateStepsDialog dialog(source, path, this);
+    if (dialog.exec() == QDialog::Accepted)
+        runStepGeneration(source, dialog.options(), dialog.outputFolder());
+}
+
+void MainWindow::runStepGeneration(const QImage& source, const StepOptions& options, const QString& folder)
+{
+    auto* progress = new QProgressDialog(tr("Generating steps..."), tr("Cancel"), 0, 0, this);
+    progress->setWindowTitle(tr("Generate Steps from Image"));
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setMinimumDuration(0);
+    progress->setAutoClose(false);
+    progress->setAutoReset(false);
+
+    auto* watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::progressRangeChanged, progress, &QProgressDialog::setRange);
+    connect(watcher, &QFutureWatcher<QString>::progressValueChanged, progress, &QProgressDialog::setValue);
+    connect(progress, &QProgressDialog::canceled, watcher, &QFutureWatcher<QString>::cancel);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, progress, folder] {
+        const bool canceled = watcher->isCanceled();
+        const QString error = !canceled && watcher->future().resultCount() > 0 ? watcher->result() : QString();
+        watcher->deleteLater();
+        progress->deleteLater();
+        if (canceled)
+            statusBar()->showMessage(tr("Step generation cancelled"), 5000);
+        else if (!error.isEmpty())
+            QMessageBox::warning(this, tr("Generate Steps from Image"), error);
+        else
+            loadSequence(folder);
+    });
+    watcher->setFuture(QtConcurrent::run([source, options, folder](QPromise<QString>& promise) {
+        promise.addResult(saveSteps(source, options, folder, [&](int done, int total) {
+            promise.setProgressRange(0, total);
+            promise.setProgressValue(done);
+            return !promise.isCanceled();
+        }));
+    }));
 }
 
 void MainWindow::loadSequence(const QString& folder)

@@ -64,6 +64,21 @@ Qt 경로가 `C:/Qt/6.8.2/msvc2022_64`가 아니면 `CMakeUserPresets.json`에�
 
 명령줄: `LumiCanvas.exe [프로젝트.lumi | 이미지 폴더] [--windowed-output]`
 
+### 이미지에서 단계 자동 생성
+
+완성 이미지 한 장만 있으면 단계 이미지를 만들 수 있습니다. **시퀀스 → 이미지에서 단계 생성**(Ctrl+G)을 열고 이미지를 고르면 미리보기를 보며 조절할 수 있습니다.
+
+- **나누는 기준**: 색 영역, 또는 명암(회색).
+- **영역 수**: 많을수록 작은 색까지 나뉩니다. 작은 부분의 색이 합쳐져 보이면 값을 올리세요.
+- **칠하는 순서**: 어두운 곳부터 또는 밝은 곳부터.
+- **외곽선으로 시작**, **선 세밀도**, **마지막에 원본 이미지 표시**.
+
+결과는 `이미지이름_steps` 폴더에 `step01_outline.png`처럼 저장되고 바로 시퀀스로 열립니다. 비어 있지 않은 폴더에는 저장하지 않아 이전 결과를 덮어쓰지 않습니다.
+
+프로젝터는 검은색을 투사할 수 없어서, 어두운 영역도 보이도록 실제 색보다 밝게 표시됩니다. 마지막 원본 단계는 원래 색 그대로입니다.
+
+명령줄: `LumiCanvas.exe 이미지.png --generate-steps 출력폴더` (기본 설정으로 생성하고 창 없이 종료)
+
 ### 언어
 
 **보기 → 언어**에서 한국어, English, 시스템 기본값 중에서 고릅니다. 바꾼 언어는 다시 시작하면 적용됩니다.
@@ -82,6 +97,8 @@ cmake --build build --target update_translations --config Debug
 | `src/core/Sequence` | 단계 이미지 목록, 현재 단계, 백그라운드 미리 불러오기 |
 | `src/core/History` | 실행 취소/다시 실행 (서피스 스냅샷 기반, 연속 편집은 한 단계로 합침) |
 | `translations/` | UI 번역 (.ts) |
+| `src/core/StepGenerator` | 완성 이미지를 누적 단계로 분할 (색 군집화, 외곽선 검출, 파일 저장) |
+| `tests/` | 자동 테스트 (`ctest --test-dir build -C Debug`) |
 | `src/core/ImageLoader` | 스레드에서 안전하게 쓸 수 있는 이미지 로더 |
 | `src/render/RenderEngine` | D3D11 디바이스와 렌더 스레드, 출력마다 flip-model 스왑체인 |
 | `src/render/OutputWindow` | 프로젝터 출력용 네이티브 창 |

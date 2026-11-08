@@ -2,6 +2,7 @@
 
 #include "core/History.h"
 #include "core/Project.h"
+#include "core/StepGenerator.h"
 #include "render/RenderEngine.h"
 #include "ui/KeySettingsDialog.h"
 
@@ -66,6 +67,8 @@ private:
     void updateTitle();
 
     void openSequenceFolder();
+    void generateStepsFromImage();
+    void runStepGeneration(const QImage& source, const StepOptions& options, const QString& folder);
     void onSequenceLoaded();
     void updateSequencePanel();
     void setGuideVisible(bool visible);
