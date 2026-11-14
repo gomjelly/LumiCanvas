@@ -276,10 +276,6 @@
         <translation>&lt;h3&gt;LumiCanvas %1&lt;/h3&gt;&lt;p&gt;그림 그리기를 위한 프로젝션 가이드&lt;/p&gt;&lt;p&gt;GPU: %2&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>Main</source>
-        <translation>기본</translation>
-    </message>
-    <message>
         <source>System Default</source>
         <translation>시스템 기본값</translation>
     </message>
@@ -708,6 +704,20 @@
     <message>
         <source>Step generation cancelled</source>
         <translation>단계 생성을 취소했습니다</translation>
+    </message>
+    <message>
+        <source>Choose Folder...</source>
+        <translation>폴더 선택...</translation>
+    </message>
+    <message>
+        <source>No folder selected</source>
+        <translation>선택한 폴더 없음</translation>
+    </message>
+    <message>
+        <source>%1  (step %2 / %3)
+%4</source>
+        <translation>%1  (%2 / %3 단계)
+%4</translation>
     </message>
 </context>
 <context>

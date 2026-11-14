@@ -14,6 +14,7 @@
 class QAction;
 class QCheckBox;
 class QComboBox;
+class QDockWidget;
 class QDoubleSpinBox;
 class QFormLayout;
 class QToolButton;
@@ -95,6 +96,7 @@ private:
     void onStructureChanged();
     void onSurfaceChanged(int index);
     void updatePropertyPanel();
+    void updateContentStatus();
     void syncEngine();
     void applyGuide(SceneSurface& out, const Surface& surface) const;
     void applyAdjustments(SceneSurface& out, const Surface& surface) const;
@@ -161,8 +163,9 @@ private:
     QGroupBox* m_propertiesBox = nullptr;
     QLineEdit* m_nameEdit = nullptr;
     QComboBox* m_contentCombo = nullptr;
-    QPushButton* m_imageButton = nullptr;
-    QLabel* m_imageLabel = nullptr;
+    QPushButton* m_contentButton = nullptr; // picks the image or the sequence folder
+    QLabel* m_contentLabel = nullptr;
+    QDockWidget* m_sequenceDock = nullptr;
     QDoubleSpinBox* m_canvasWidth = nullptr;
     QDoubleSpinBox* m_canvasHeight = nullptr;
     QComboBox* m_fitCombo = nullptr;

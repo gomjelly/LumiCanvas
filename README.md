@@ -1,4 +1,8 @@
-# LumiCanvas
+<p align="center">
+  <img src="resources/icons/lumicanvas.png" width="128" alt="LumiCanvas 아이콘">
+</p>
+
+<h1 align="center">LumiCanvas</h1>
 
 밑그림 없이 그림을 그릴 수 있게 도와주는 **프로젝션 가이드** 앱입니다 (Windows 전용, C++20 · Qt 6 · Direct3D 11).
 
@@ -98,6 +102,7 @@ cmake --build build --target update_translations --config Debug
 | `src/core/History` | 실행 취소/다시 실행 (서피스 스냅샷 기반, 연속 편집은 한 단계로 합침) |
 | `translations/` | UI 번역 (.ts) |
 | `src/core/StepGenerator` | 완성 이미지를 누적 단계로 분할 (색 군집화, 외곽선 검출, 파일 저장) |
+| `resources/icons/` | 앱 아이콘 (`tools/make_icon.ps1`로 다시 생성) |
 | `tests/` | 자동 테스트 (`ctest --test-dir build -C Debug`) |
 | `src/core/ImageLoader` | 스레드에서 안전하게 쓸 수 있는 이미지 로더 |
 | `src/render/RenderEngine` | D3D11 디바이스와 렌더 스레드, 출력마다 flip-model 스왑체인 |

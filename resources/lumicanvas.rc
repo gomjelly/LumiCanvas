@@ -1,0 +1,3 @@
+// Executable icon shown by Explorer, the taskbar and shortcuts.
+// Regenerate the icon with tools/make_icon.ps1.
+IDI_ICON1 ICON "icons/lumicanvas.ico"

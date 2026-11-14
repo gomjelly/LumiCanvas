@@ -7,7 +7,8 @@
 namespace lumi {
 
 // Loads an image as RGBA8888, honouring EXIF orientation and clamping it to the
-// largest texture size the renderer supports. Safe to call from any thread.
+// largest texture size the renderer supports. Dark art on a transparent background
+// is placed on white so it can be seen on the black output. Safe from any thread.
 QImage loadImage(const QString& path);
 
 // Small preview fitting a box of maxSide pixels, or null on failure. Any thread.

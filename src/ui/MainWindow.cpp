@@ -41,7 +41,6 @@
 #include <QSlider>
 #include <QStandardPaths>
 #include <QStatusBar>
-#include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -79,6 +78,13 @@ MainWindow::MainWindow(QWidget* parent)
     m_editor = new WarpEditor(&m_project, &m_history, this);
     setCentralWidget(m_editor);
     setAcceptDrops(true);
+    // Clear edges between the menu bar, the side panels and the editor; the plain
+    // Fusion frame is nearly invisible in the dark theme.
+    setStyleSheet(QStringLiteral(
+        "QMenuBar { border-bottom: 1px solid #4a4a52; }"
+        "QDockWidget::title { background: #2d2d33; padding: 5px 8px; border-bottom: 1px solid #4a4a52; }"
+        "QMainWindow::separator { background: #44444c; width: 4px; height: 4px; }"
+        "QMainWindow::separator:hover { background: #5b82b8; }"));
 
     createActions();
     loadKeyBindings();
@@ -178,10 +184,23 @@ void MainWindow::createActions()
     editMenu->addAction(undoAction);
     editMenu->addAction(redoAction);
 
+    // Menus follow the order of a session: set up surfaces, open the output, then
+    // step through the sequence while drawing.
+    QMenu* surfaceMenu = menuBar()->addMenu(tr("S&urface"));
+    addAction(surfaceMenu, tr("&Add Surface"), {QKeySequence(Qt::CTRL | Qt::Key_T)}, &MainWindow::addSurface);
+    addAction(surfaceMenu, tr("&Remove Surface"), {QKeySequence::Delete}, &MainWindow::removeSurface);
+    surfaceMenu->addSeparator();
+    addAction(surfaceMenu, tr("Set &Image..."), {QKeySequence(Qt::CTRL | Qt::Key_I)}, &MainWindow::chooseImage);
+
+    QMenu* outputMenu = menuBar()->addMenu(tr("&Output"));
+    addAction(outputMenu, tr("&Open Output"), {QKeySequence(Qt::CTRL | Qt::Key_Return)},
+              &MainWindow::openSelectedOutput);
+    addAction(outputMenu, tr("&Close All Outputs"), {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return)},
+              &MainWindow::closeAllOutputs);
+
     QMenu* sequenceMenu = menuBar()->addMenu(tr("Se&quence"));
-    QAction* openFolderAction = addAction(sequenceMenu, tr("&Open Folder..."),
-                                          {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O)},
-                                          &MainWindow::openSequenceFolder);
+    addAction(sequenceMenu, tr("&Open Folder..."), {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O)},
+              &MainWindow::openSequenceFolder);
     addAction(sequenceMenu, tr("&Generate Steps from Image..."), {QKeySequence(Qt::CTRL | Qt::Key_G)},
               &MainWindow::generateStepsFromImage);
     sequenceMenu->addSeparator();
@@ -215,21 +234,6 @@ void MainWindow::createActions()
     for (QAction* action : std::as_const(m_showActions))
         action->setShortcutContext(Qt::ApplicationShortcut);
 
-    QMenu* surfaceMenu = menuBar()->addMenu(tr("S&urface"));
-    QAction* addSurfaceAction = addAction(surfaceMenu, tr("&Add Surface"),
-                                          {QKeySequence(Qt::CTRL | Qt::Key_T)}, &MainWindow::addSurface);
-    QAction* removeSurfaceAction = addAction(surfaceMenu, tr("&Remove Surface"),
-                                             {QKeySequence::Delete}, &MainWindow::removeSurface);
-    surfaceMenu->addSeparator();
-    addAction(surfaceMenu, tr("Set &Image..."), {QKeySequence(Qt::CTRL | Qt::Key_I)}, &MainWindow::chooseImage);
-
-    QMenu* outputMenu = menuBar()->addMenu(tr("&Output"));
-    QAction* openOutputAction = addAction(outputMenu, tr("&Open Output"),
-                                          {QKeySequence(Qt::CTRL | Qt::Key_Return)},
-                                          &MainWindow::openSelectedOutput);
-    addAction(outputMenu, tr("&Close All Outputs"), {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return)},
-              &MainWindow::closeAllOutputs);
-
     QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
     createLanguageMenu(viewMenu->addMenu(tr("&Language")));
     addAction(viewMenu, tr("&Key Settings..."), {}, &MainWindow::openKeySettings);
@@ -241,21 +245,6 @@ void MainWindow::createActions()
                            tr("<h3>LumiCanvas %1</h3><p>Projection guide for drawing.</p>"
                               "<p>GPU: %2</p>").arg(QStringLiteral(LUMI_VERSION), m_engine.adapterName()));
     });
-
-    QToolBar* toolBar = addToolBar(tr("Main"));
-    toolBar->setObjectName("mainToolBar");
-    toolBar->setMovable(false);
-    toolBar->addAction(openFolderAction);
-    toolBar->addSeparator();
-    toolBar->addAction(m_previousAction);
-    toolBar->addAction(m_nextAction);
-    toolBar->addAction(m_guideAction);
-    toolBar->addAction(m_alignAction);
-    toolBar->addSeparator();
-    toolBar->addAction(addSurfaceAction);
-    toolBar->addAction(removeSurfaceAction);
-    toolBar->addSeparator();
-    toolBar->addAction(openOutputAction);
 }
 
 void MainWindow::createLanguageMenu(QMenu* menu)
@@ -297,8 +286,9 @@ void MainWindow::createDocks()
         dock->setFeatures(QDockWidget::DockWidgetMovable);
         dock->setWidget(panel);
         addDockWidget(area, dock);
+        return dock;
     };
-    addDock(tr("Sequence"), "sequenceDock", createSequencePanel(), Qt::RightDockWidgetArea);
+    m_sequenceDock = addDock(tr("Sequence"), "sequenceDock", createSequencePanel(), Qt::RightDockWidgetArea);
     addDock(tr("Surfaces"), "surfacesDock", createSurfacesPanel(), Qt::LeftDockWidgetArea);
     addDock(tr("Outputs"), "outputsDock", createOutputsPanel(), Qt::LeftDockWidgetArea);
 }
@@ -681,17 +671,24 @@ QWidget* MainWindow::createSurfacesPanel()
     m_contentCombo = new QComboBox;
     m_contentCombo->addItems({tr("Test Pattern"), tr("Image"), tr("Sequence")});
     connect(m_contentCombo, &QComboBox::activated, this, &MainWindow::onContentActivated);
-    m_imageButton = new QPushButton(tr("Choose..."));
-    connect(m_imageButton, &QPushButton::clicked, this, &MainWindow::chooseImage);
+    m_contentButton = new QPushButton;
+    connect(m_contentButton, &QPushButton::clicked, this, [this] {
+        if (!m_project.isValidIndex(m_selected))
+            return;
+        if (m_project.surface(m_selected).content == ContentType::Sequence)
+            openSequenceFolder();
+        else
+            chooseImage();
+    });
     auto* contentRow = new QHBoxLayout;
     contentRow->addWidget(m_contentCombo, 1);
-    contentRow->addWidget(m_imageButton);
+    contentRow->addWidget(m_contentButton);
     form->addRow(tr("Content"), contentRow);
 
-    m_imageLabel = new QLabel;
-    m_imageLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_imageLabel->setWordWrap(true);
-    form->addRow(QString(), m_imageLabel);
+    m_contentLabel = new QLabel;
+    m_contentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_contentLabel->setWordWrap(true);
+    form->addRow(QString(), m_contentLabel);
 
     auto makeSizeSpin = [this] {
         auto* spin = new QDoubleSpinBox;
@@ -1037,6 +1034,8 @@ void MainWindow::onSequenceLoaded()
 
 void MainWindow::updateSequencePanel()
 {
+    updateContentStatus();
+
     const Sequence& sequence = m_project.sequence();
     const int current = sequence.currentIndex();
     const bool empty = sequence.isEmpty();
@@ -1206,6 +1205,38 @@ void MainWindow::onSurfaceChanged(int index)
     syncEngine();
 }
 
+void MainWindow::updateContentStatus()
+{
+    const bool valid = m_project.isValidIndex(m_selected);
+    const ContentType content = valid ? m_project.surface(m_selected).content : ContentType::TestPattern;
+
+    m_contentButton->setVisible(content != ContentType::TestPattern);
+    // The sequence panel only applies to a surface that shows the sequence. It stays
+    // in place when disabled, so the layout doesn't jump while switching surfaces.
+    m_sequenceDock->widget()->setEnabled(content == ContentType::Sequence);
+
+    if (content == ContentType::Image) {
+        const Surface& s = m_project.surface(m_selected);
+        const QString file = QFileInfo(s.imagePath).fileName();
+        m_contentButton->setText(tr("Choose..."));
+        m_contentLabel->setText(s.image.isNull()
+                                    ? tr("%1 (missing)").arg(file)
+                                    : QStringLiteral("%1  (%2 × %3)").arg(file).arg(s.image.width()).arg(s.image.height()));
+    } else if (content == ContentType::Sequence) {
+        const Sequence& sequence = m_project.sequence();
+        m_contentButton->setText(tr("Choose Folder..."));
+        m_contentLabel->setText(sequence.isEmpty()
+                                    ? tr("No folder selected")
+                                    : tr("%1  (step %2 / %3)\n%4")
+                                          .arg(QFileInfo(sequence.folder()).fileName())
+                                          .arg(sequence.currentIndex() + 1)
+                                          .arg(sequence.count())
+                                          .arg(sequence.fileName(sequence.currentIndex())));
+    } else {
+        m_contentLabel->clear();
+    }
+}
+
 void MainWindow::updatePropertyPanel()
 {
     const bool valid = m_project.isValidIndex(m_selected);
@@ -1222,9 +1253,9 @@ void MainWindow::updatePropertyPanel()
     const QSignalBlocker b9(m_cornerX);
     const QSignalBlocker b10(m_cornerY);
 
+    updateContentStatus();
     if (!valid) {
         m_nameEdit->clear();
-        m_imageLabel->clear();
         m_opacityLabel->clear();
         return;
     }
@@ -1233,15 +1264,6 @@ void MainWindow::updatePropertyPanel()
     if (m_nameEdit->text() != s.name) // don't disturb the cursor while typing
         m_nameEdit->setText(s.name);
     m_contentCombo->setCurrentIndex(int(s.content));
-    m_imageButton->setVisible(s.content == ContentType::Image);
-    if (s.content == ContentType::Image) {
-        const QString file = QFileInfo(s.imagePath).fileName();
-        m_imageLabel->setText(s.image.isNull()
-                                  ? tr("%1 (missing)").arg(file)
-                                  : QStringLiteral("%1  (%2 × %3)").arg(file).arg(s.image.width()).arg(s.image.height()));
-    } else {
-        m_imageLabel->clear();
-    }
     m_canvasWidth->setValue(s.canvasSizeMm.width());
     m_canvasHeight->setValue(s.canvasSizeMm.height());
     m_fitCombo->setCurrentIndex(int(s.fit));

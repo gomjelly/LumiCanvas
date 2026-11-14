@@ -36,12 +36,19 @@ qt_add_executable(LumiCanvas WIN32
     src/ui/KeySettingsDialog.cpp
     src/ui/WarpEditor.h
     src/ui/WarpEditor.cpp
+    resources/lumicanvas.rc
 )
 
 qt_add_resources(LumiCanvas "shaders"
     PREFIX "/shaders"
     BASE "resources/shaders"
     FILES resources/shaders/warp.hlsl
+)
+
+qt_add_resources(LumiCanvas "icons"
+    PREFIX "/icons"
+    BASE "resources/icons"
+    FILES resources/icons/lumicanvas.ico
 )
 
 # UI translations, embedded as :/i18n/lumicanvas_<lang>.qm.
@@ -70,6 +77,7 @@ enable_testing()
 find_package(Qt6 REQUIRED COMPONENTS Test)
 qt_add_executable(test_stepgenerator
     tests/test_stepgenerator.cpp
+    src/core/ImageLoader.cpp
     src/core/StepGenerator.cpp
 )
 set_target_properties(test_stepgenerator PROPERTIES WIN32_EXECUTABLE FALSE)

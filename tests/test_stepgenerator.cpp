@@ -1,8 +1,10 @@
+#include "core/ImageLoader.h"
 #include "core/StepGenerator.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageWriter>
 #include <QPainter>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -40,6 +42,17 @@ StepOptions regionsOnly(int levels)
     options.outline = false;
     options.finalOriginal = false;
     return options;
+}
+
+// A cross drawn on a fully transparent background.
+QImage lineArt(const QColor& color)
+{
+    QImage image(100, 100, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter p(&image);
+    p.fillRect(46, 0, 8, 100, color);
+    p.fillRect(0, 46, 100, 8, color);
+    return image;
 }
 
 int lit(const QImage& image, int x, int y)
@@ -270,6 +283,68 @@ private slots:
             return false;
         });
         QCOMPARE(calls, 1);
+    }
+
+    // Black lines on transparency must not disappear on the black output.
+    void loaderPutsDarkArtOnPaper()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("art.png"));
+        QVERIFY(lineArt(QColor(Qt::black)).save(path));
+        const QImage loaded = lumi::loadImage(path);
+        QCOMPARE(loaded.pixelColor(10, 10), QColor(255, 255, 255));
+        QCOMPARE(loaded.pixelColor(50, 50), QColor(0, 0, 0));
+    }
+
+    void loaderKeepsLightArtTransparent()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("art.png"));
+        QVERIFY(lineArt(QColor(Qt::white)).save(path));
+        const QImage loaded = lumi::loadImage(path);
+        QCOMPARE(loaded.pixelColor(10, 10).alpha(), 0);
+        QCOMPARE(loaded.pixelColor(50, 50), QColor(255, 255, 255));
+    }
+
+    void loaderLeavesOpaqueImagesAlone()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("dark.png"));
+        QImage dark(100, 100, QImage::Format_ARGB32);
+        dark.fill(QColor(10, 10, 10));
+        QVERIFY(dark.save(path));
+        QCOMPARE(lumi::loadImage(path).pixelColor(50, 50), QColor(10, 10, 10));
+    }
+
+    void thumbnailMatchesWhatTheOutputShows()
+    {
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("art.png"));
+        QVERIFY(lineArt(QColor(Qt::black)).save(path));
+        QCOMPARE(lumi::loadThumbnail(path, 50).pixelColor(5, 5), QColor(255, 255, 255));
+    }
+
+    void loaderReadsEveryCommonFormat_data()
+    {
+        QTest::addColumn<QByteArray>("format");
+        for (const char* format : {"png", "jpg", "bmp", "tiff", "webp", "gif"})
+            QTest::newRow(format) << QByteArray(format);
+    }
+
+    void loaderReadsEveryCommonFormat()
+    {
+        QFETCH(QByteArray, format);
+        if (!QImageWriter::supportedImageFormats().contains(format))
+            QSKIP("Qt has no writer for this format here");
+        QTemporaryDir temp;
+        const QString path = temp.filePath(QStringLiteral("a.") + QString::fromLatin1(format));
+        QImage image(64, 64, QImage::Format_RGB32);
+        image.fill(Qt::white);
+        QVERIFY(image.save(path, format.constData()));
+        const QImage loaded = lumi::loadImage(path);
+        QVERIFY(!loaded.isNull());
+        QCOMPARE(loaded.format(), QImage::Format_RGBA8888);
+        QVERIFY(qGray(loaded.pixel(32, 32)) > 200);
     }
 
     void nullImageProducesNothing()

@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QScreen>
@@ -42,6 +43,8 @@ int main(int argc, char* argv[])
     QApplication::setOrganizationName(QStringLiteral("LumiCanvas"));
     QApplication::setApplicationVersion(QStringLiteral(LUMI_VERSION));
     QApplication::setStyle(QStringLiteral("Fusion"));
+    // Title bars of the editor and the output windows; the .exe icon comes from lumicanvas.rc.
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/lumicanvas.ico")));
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Dark);
 #endif
